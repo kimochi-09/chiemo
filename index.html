@@ -64,7 +64,7 @@
                 </div>
             </div>
             <div id="account-dropdown" class="account-menu">
-                <button onclick="document.getElementById('upload-avt').click()">🖼️ Đổi ảnh </button>
+                <button onclick="document.getElementById('upload-avt').click()">🖼️ Chọn ảnh từ máy</button>
                 <input type="file" id="upload-avt" accept="image/*" style="display:none" onchange="handleFileSelect(this)">
                 <button onclick="logout()" style="color:red; border-top:1px solid #eee">🚪 Đăng xuất</button>
             </div>
@@ -135,6 +135,7 @@
         let db = JSON.parse(localStorage.getItem('game_db') || '{}');
         if(type === 'reg') { 
             if(db[u]) return alert("Tên đã tồn tại!");
+            // Đã chỉnh sửa: Khởi tạo win và lose về 0 ngay khi đăng ký
             db[u] = {pass:p, win:0, lose:0, avt: u.charAt(0).toUpperCase()}; 
             localStorage.setItem('game_db', JSON.stringify(db)); alert("Đã tạo tài khoản!"); 
         } else if(db[u]?.pass === p) { sessionStorage.setItem('user', u); showMenu(); }
@@ -149,11 +150,35 @@
         myAvt = stats.avt;
         document.getElementById('display-username').innerText = myName;
         updateAvtUI('avatar-letter', myAvt);
+        // Hiển thị thống kê mới nhất
         document.getElementById('stat-win').innerText = stats.win || 0;
         document.getElementById('stat-lose').innerText = stats.lose || 0;
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('menu-screen').style.display = 'flex';
         if(!peer) initPeer();
+    }
+
+    // --- LƯU TRỮ VÀ GIAO DIỆN ---
+    function updateStats(res) {
+        let db = JSON.parse(localStorage.getItem('game_db') || '{}');
+        if(db[myName]) { 
+            // Đã chỉnh sửa: Cộng dồn kết quả một cách chính xác
+            db[myName][res] = (db[myName][res] || 0) + 1; 
+            localStorage.setItem('game_db', JSON.stringify(db)); 
+        }
+    }
+
+    function backToMenu() { 
+        document.getElementById('main-game-area').style.display = 'none'; 
+        document.getElementById('victory-screen').style.display = 'none'; 
+        document.getElementById('chat-bubble').style.display = 'none'; 
+        document.getElementById('chat-popup').style.display = 'none'; 
+        document.getElementById('menu-screen').style.display = 'flex'; 
+        
+        if(conn) conn.close(); 
+        
+        // Đã chỉnh sửa: Gọi lại showMenu() để cập nhật con số thắng/thua mới lên màn hình
+        showMenu(); 
     }
 
     function handleFileSelect(input) {
@@ -241,7 +266,7 @@
             if(data.type === 'move') handleMove(data.r, data.c, data.isH);
             if(data.type === 'chat') addChat(data.sender, data.text);
             if(data.type === 'surrender') { 
-                updateStats('win'); 
+                updateStats('win'); // Thắng khi đối thủ đầu hàng
                 addChat(null, "Đối thủ đã đầu hàng", true);
                 celebration();
                 showVictory("CHIẾN THẮNG 🏆", "Bạn quá mạnh, đối thủ đã xin hàng!"); 
@@ -313,14 +338,16 @@
     function endGame() {
         gameActive = false;
         const myS = scores[myRole==='host'?1:2], pS = scores[myRole==='host'?2:1];
-        if(myS > pS) { updateStats('win'); celebration(); showVictory("CHIẾN THẮNG 👑", `Bạn thắng rực rỡ với tỉ số ${myS} - ${pS}!`); }
-        else if(myS < pS) { updateStats('lose'); showVictory("THẤT BẠI 🏳️", `Tỉ số: ${myS} - ${pS}. Hãy cố gắng hơn nhé!`); }
+        if(myS > pS) { 
+            updateStats('win'); // Đã chỉnh sửa: Lưu thắng khi kết thúc trận
+            celebration(); 
+            showVictory("CHIẾN THẮNG 👑", `Bạn thắng rực rỡ với tỉ số ${myS} - ${pS}!`); 
+        }
+        else if(myS < pS) { 
+            updateStats('lose'); // Đã chỉnh sửa: Lưu thua khi kết thúc trận
+            showVictory("THẤT BẠI 🏳️", `Tỉ số: ${myS} - ${pS}. Hãy cố gắng hơn nhé!`); 
+        }
         else showVictory("HÒA NHAU 🤝", `Trận đấu cân tài cân sức với tỉ số ${myS} - ${pS}!`);
-    }
-
-    function updateStats(res) {
-        let db = JSON.parse(localStorage.getItem('game_db') || '{}');
-        if(db[myName]) { db[myName][res]++; localStorage.setItem('game_db', JSON.stringify(db)); }
     }
 
     function updateUI() {
@@ -341,16 +368,14 @@
         document.getElementById('victory-screen').style.display='flex'; 
     }
     
-    function backToMenu() { 
-        document.getElementById('main-game-area').style.display = 'none'; 
-        document.getElementById('victory-screen').style.display = 'none'; 
-        document.getElementById('chat-bubble').style.display = 'none'; 
-        document.getElementById('chat-popup').style.display = 'none'; 
-        document.getElementById('menu-screen').style.display = 'flex'; 
-        if(conn) conn.close(); showMenu(); 
+    function confirmExit() { 
+        if(confirm("Đầu hàng?")) { 
+            if(conn?.open) conn.send({type:'surrender'}); 
+            updateStats('lose'); // Đã chỉnh sửa: Lưu một trận thua khi đầu hàng
+            backToMenu(); 
+        } 
     }
-    
-    function confirmExit() { if(confirm("Đầu hàng?")) { if(conn?.open) conn.send({type:'surrender'}); updateStats('lose'); backToMenu(); } }
+
     function toggleAccountMenu(e) { e.stopPropagation(); const m = document.getElementById('account-dropdown'); m.style.display = m.style.display === 'flex' ? 'none' : 'flex'; }
     window.onclick = () => document.getElementById('account-dropdown').style.display = 'none';
     function logout() { sessionStorage.removeItem('user'); location.reload(); }
