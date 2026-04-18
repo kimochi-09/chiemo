@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chiếm Ô Online</title>
+    <title>Chiếm Ô Online - Full Fix</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --p1: #ff4757; --p2: #2f3542; --primary: #2ed573; --danger: #ff4757; }
@@ -18,22 +18,16 @@
         .active-turn { border-color: var(--primary) !important; background: #f0fff4 !important; }
 
         /* CHAT UI */
-        #chat-bubble {
-            position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px;
-            background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 999;
-        }
-        #unread-dot {
-            position: absolute; top: 0; right: 0; width: 14px; height: 14px;
-            background: red; border-radius: 50%; border: 2px solid white; display: none;
-        }
-        #chat-popup {
-            position: fixed; bottom: 85px; right: 20px; width: 300px; max-width: calc(100% - 40px);
-            background: white; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.2);
-            display: none; flex-direction: column; z-index: 1000; overflow: hidden;
-        }
+        #chat-bubble { position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 999; }
+        #unread-dot { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: red; border-radius: 50%; border: 2px solid white; display: none; }
+        #chat-popup { position: fixed; bottom: 85px; right: 20px; width: 300px; max-width: calc(100% - 40px); background: white; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
         #chat-header { background: #f8f9fa; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; border-bottom: 1px solid #eee; }
         #chat-content { height: 250px; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+
+        /* VICTORY UI */
+        .victory-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; color: white; text-align: center; backdrop-filter: blur(5px); }
+        .victory-card { background: white; color: #2f3542; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 80%; max-width: 320px; }
+        .victory-card h2 { margin-top: 0; color: var(--primary); }
     </style>
 </head>
 <body>
@@ -45,6 +39,14 @@
         <input type="password" id="auth-pass" placeholder="Mật khẩu">
         <button class="main-btn" onclick="auth('login')">Đăng nhập</button>
         <button onclick="auth('reg')" style="background:none; border:none; margin-top:10px; font-size:12px; color:#666; cursor:pointer;">Đăng ký</button>
+    </div>
+</div>
+
+<div id="victory-screen" class="victory-overlay">
+    <div class="victory-card">
+        <h2 id="victory-title">🎉 KẾT QUẢ</h2>
+        <p id="victory-msg" style="font-size: 18px; margin-bottom: 20px; color: #555;"></p>
+        <button class="main-btn" onclick="closeVictory()">Chơi ván mới</button>
     </div>
 </div>
 
@@ -89,6 +91,7 @@
     let SIZE, OFFSET, currentPlayer = 1, scores = {1:0, 2:0};
     let hLines, vLines, squares;
     let chatData = [], isChatOpen = false;
+    let gameActive = false; // QUAN TRỌNG: Chặn click khi chưa bắt đầu
 
     function auth(type) {
         const u = document.getElementById('auth-user').value.trim(), p = document.getElementById('auth-pass').value.trim();
@@ -117,6 +120,32 @@
         if(id) { conn = peer.connect(id); myRole = 'guest'; setupConn(); }
     }
 
+    function setupConn() {
+        conn.on('open', () => {
+            document.getElementById('game-status').innerText = "Đã kết nối!";
+            conn.send({ type: 'name', name: myName });
+            addMsg('Hệ thống', 'Đối thủ đã sẵn sàng.', true);
+            updateBtnState('in-game');
+            resetGame();
+            gameActive = true; // Kích hoạt bàn cờ khi có người kết nối
+        });
+        conn.on('data', data => {
+            if(data.type === 'name') document.getElementById('peer-label').innerText = data.name;
+            if(data.type === 'chat') addMsg(data.sender, data.text);
+            if(data.type === 'move') handleMove(data.r, data.c, data.isH);
+            if(data.type === 'surrender') {
+                gameActive = false;
+                showVictory("🎉 ĐỐI THỦ ĐẦU HÀNG", "Bạn đã chiến thắng ván này!");
+                updateBtnState('lobby');
+            }
+        });
+        conn.on('close', () => {
+            gameActive = false;
+            addMsg('Hệ thống', 'Đối thủ đã thoát.', true);
+            updateBtnState('lobby');
+        });
+    }
+
     function updateBtnState(state) {
         const btn = document.getElementById('main-action-btn');
         if (state === 'in-game') {
@@ -125,7 +154,7 @@
             btn.onclick = () => {
                 if(confirm("Xác nhận đầu hàng?")) {
                     conn.send({ type: 'surrender' });
-                    addMsg('Hệ thống', 'Bạn đã đầu hàng.', true);
+                    gameActive = false;
                     resetGame();
                     updateBtnState('lobby');
                 }
@@ -134,59 +163,7 @@
             btn.innerText = "🎮 Kết nối & Chơi";
             btn.style.background = "var(--primary)";
             btn.onclick = manualConnect;
-        }
-    }
-
-    function setupConn() {
-        conn.on('open', () => {
-            document.getElementById('game-status').innerText = "Đã kết nối!";
-            conn.send({ type: 'name', name: myName });
-            addMsg('Hệ thống', 'Đối thủ đã sẵn sàng.', true);
-            updateBtnState('in-game');
-            resetGame();
-        });
-        conn.on('data', data => {
-            if(data.type === 'name') document.getElementById('peer-label').innerText = data.name;
-            if(data.type === 'chat') addMsg(data.sender, data.text);
-            if(data.type === 'move') handleMove(data.r, data.c, data.isH);
-            if(data.type === 'surrender') {
-                alert("Đối thủ đã đầu hàng! Bạn thắng.");
-                addMsg('Hệ thống', 'Đối thủ đã đầu hàng.', true);
-                resetGame();
-                updateBtnState('lobby');
-            }
-        });
-        conn.on('close', () => {
-            addMsg('Hệ thống', 'Đối thủ đã thoát.', true);
-            updateBtnState('lobby');
-        });
-    }
-
-    function toggleChat() {
-        isChatOpen = !isChatOpen;
-        document.getElementById('chat-popup').style.display = isChatOpen ? 'flex' : 'none';
-        if(isChatOpen) { document.getElementById('unread-dot').style.display = 'none'; renderChat(); }
-    }
-    function addMsg(sender, text, isSys = false) {
-        chatData.push({ sender, text, isSys });
-        if(!isChatOpen) document.getElementById('unread-dot').style.display = 'block';
-        renderChat();
-    }
-    function renderChat() {
-        const box = document.getElementById('chat-content');
-        box.innerHTML = chatData.map(m => `
-            <div style="margin-bottom:4px; ${m.isSys ? 'color:#888; font-style:italic;' : ''}">
-                ${m.isSys ? '' : `<b style="color:${m.sender===myName?'var(--p1)':'#2f3542'}">${m.sender}:</b> `}${m.text}
-            </div>
-        `).join('');
-        box.scrollTop = box.scrollHeight;
-    }
-    function sendChat() {
-        const inp = document.getElementById('chat-input'), txt = inp.value.trim();
-        if(txt && conn?.open) {
-            conn.send({ type: 'chat', sender: myName, text: txt });
-            addMsg(myName, txt);
-            inp.value = '';
+            gameActive = false; // Khóa bàn cờ khi thoát game
         }
     }
 
@@ -221,14 +198,18 @@
         ctx.fillStyle = "#bbb";
         for(let r=0; r<=GRID; r++) for(let c=0; c<=GRID; c++) { ctx.beginPath(); ctx.arc(c*SIZE+OFFSET, r*SIZE+OFFSET, 2.5, 0, 7); ctx.fill(); }
     }
+    
     canvas.onclick = (e) => {
-        if(!conn?.open || (myRole==='host'&&currentPlayer!==1) || (myRole==='guest'&&currentPlayer!==2)) return;
+        // CHỈ CHO PHÉP CLICK KHI gameActive = true
+        if(!gameActive || !conn?.open || (myRole==='host'&&currentPlayer!==1) || (myRole==='guest'&&currentPlayer!==2)) return;
+        
         const rect = canvas.getBoundingClientRect(), x = e.clientX - rect.left - OFFSET, y = e.clientY - rect.top - OFFSET;
         let rh = Math.round(y/SIZE), ch = Math.floor(x/SIZE), rv = Math.floor(y/SIZE), cv = Math.round(x/SIZE);
         let isH = Math.abs(y - rh*SIZE) < Math.abs(x - cv*SIZE);
         let r = isH ? rh : rv, c = isH ? ch : cv;
         if(handleMove(r, c, isH)) conn.send({type:'move', r, c, isH});
     };
+
     function handleMove(r, c, isH) {
         let hit = false, bonus = false;
         if(isH && r>=0 && r<=GRID && c>=0 && c<GRID && !hLines[r][c]) { hLines[r][c]=true; hit=true; if(checkSq(r,c)|checkSq(r-1,c)) bonus=true; }
@@ -237,9 +218,38 @@
     }
     function checkSq(r, c) {
         if(r>=0 && r<GRID && c>=0 && c<GRID && hLines[r][c] && hLines[r+1][c] && vLines[r][c] && vLines[r][c+1] && !squares[r][c]) {
-            squares[r][c] = currentPlayer; scores[currentPlayer]++; return true;
+            squares[r][c] = currentPlayer; 
+            scores[currentPlayer]++; 
+            setTimeout(checkGameOver, 100);
+            return true;
         }
     }
+
+    function checkGameOver() {
+        let filledCount = 0;
+        for(let r=0; r<GRID; r++) for(let c=0; c<GRID; c++) if(squares[r][c] !== 0) filledCount++;
+        
+        if(filledCount === GRID * GRID) {
+            gameActive = false; // Khóa bàn cờ khi kết thúc
+            const myS = scores[myRole==='host'?1:2];
+            const peerS = scores[myRole==='host'?2:1];
+            if(myS > peerS) showVictory("🎉 CHIẾN THẮNG!", `Bạn thắng với tỉ số ${myS} - ${peerS}`);
+            else if(myS < peerS) showVictory("💀 BẠN THUA RỒI", `Tỉ số: ${myS} - ${peerS}`);
+            else showVictory("🤝 HÒA CỜ", `Cả hai đều được ${myS} điểm`);
+        }
+    }
+
+    function showVictory(title, msg) {
+        gameActive = false; 
+        document.getElementById('victory-title').innerText = title;
+        document.getElementById('victory-msg').innerText = msg;
+        document.getElementById('victory-screen').style.display = 'flex';
+    }
+    function closeVictory() {
+        document.getElementById('victory-screen').style.display = 'none';
+        resetGame();
+    }
+
     function updateUI() {
         const myT = (myRole==='host'&&currentPlayer===1) || (myRole==='guest'&&currentPlayer===2);
         document.getElementById('my-score-val').innerText = scores[myRole==='host'?1:2];
@@ -247,6 +257,34 @@
         document.getElementById('my-score-box').className = `score-card ${myT?'active-turn':''}`;
         document.getElementById('peer-score-box').className = `score-card ${!myT?'active-turn':''}`;
         document.getElementById('game-status').innerText = myT ? "Lượt bạn!" : "Đang chờ đối thủ...";
+    }
+
+    function toggleChat() {
+        isChatOpen = !isChatOpen;
+        document.getElementById('chat-popup').style.display = isChatOpen ? 'flex' : 'none';
+        if(isChatOpen) { document.getElementById('unread-dot').style.display = 'none'; renderChat(); }
+    }
+    function addMsg(sender, text, isSys = false) {
+        chatData.push({ sender, text, isSys });
+        if(!isChatOpen) document.getElementById('unread-dot').style.display = 'block';
+        renderChat();
+    }
+    function renderChat() {
+        const box = document.getElementById('chat-content');
+        box.innerHTML = chatData.map(m => `
+            <div style="margin-bottom:4px; ${m.isSys ? 'color:#888; font-style:italic;' : ''}">
+                ${m.isSys ? '' : `<b style="color:${m.sender===myName?'var(--p1)':'#2f3542'}">${m.sender}:</b> `}${m.text}
+            </div>
+        `).join('');
+        box.scrollTop = box.scrollHeight;
+    }
+    function sendChat() {
+        const inp = document.getElementById('chat-input'), txt = inp.value.trim();
+        if(txt && conn?.open) {
+            conn.send({ type: 'chat', sender: myName, text: txt });
+            addMsg(myName, txt);
+            inp.value = '';
+        }
     }
     window.onload = window.onresize = initCanvas;
 </script>
