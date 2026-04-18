@@ -6,28 +6,39 @@
     <title>Chiếm Ô Online</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --p1: #ff4757; --p2: #2f3542; --primary: #2ed573; --danger: #ff4757; }
+        :root { --p1: #ff4757; --p2: #2f3542; --primary: #2ed573; --danger: #ff4757; --gold: #f1c40f; }
         body { margin: 0; display: flex; flex-direction: column; align-items: center; font-family: 'Segoe UI', sans-serif; background: #f1f2f6; color: #2f3542; overflow: hidden; height: 100vh; }
-        .container { width: 100%; max-width: 450px; padding: 10px; box-sizing: border-box; }
+        .container { width: 100%; max-width: 450px; padding: 10px; box-sizing: border-box; position: relative; }
         .panel { background: white; padding: 12px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         input { padding: 12px; border-radius: 8px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; margin-bottom: 8px; outline: none; font-size: 16px; }
         button.main-btn { border: none; border-radius: 8px; cursor: pointer; font-weight: bold; background: var(--primary); color: white; padding: 12px; width: 100%; font-size: 16px; transition: 0.3s; }
         canvas { background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; height: auto; touch-action: none; }
-        .game-header { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
-        .score-card { flex: 1; text-align: center; padding: 10px; border-radius: 10px; background: white; border: 2px solid #eee; }
-        .active-turn { border-color: var(--primary) !important; background: #f0fff4 !important; }
+        .score-card { flex: 1; text-align: center; padding: 10px; border-radius: 10px; background: white; border: 2px solid #eee; transition: 0.3s; }
+        .active-turn { border-color: var(--primary) !important; background: #f0fff4 !important; transform: scale(1.05); }
 
-        /* CHAT UI */
-        #chat-bubble { position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 999; }
-        #unread-dot { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: red; border-radius: 50%; border: 2px solid white; display: none; }
-        #chat-popup { position: fixed; bottom: 85px; right: 20px; width: 300px; max-width: calc(100% - 40px); background: white; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
-        #chat-header { background: #f8f9fa; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; border-bottom: 1px solid #eee; }
-        #chat-content { height: 250px; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+        /* AVATAR UI */
+        #menu-screen { position: fixed; inset: 0; background: #f1f2f6; z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .account-wrapper { position: relative; display: flex; justify-content: center; width: 100%; margin-bottom: 25px; }
+        .account-box { display: flex; align-items: center; background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); cursor: pointer; }
+        .avatar-circle { width: 45px; height: 45px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: white; font-size: 20px; font-weight: bold; overflow: hidden; }
+        .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+        .account-menu { position: absolute; top: 65px; background: white; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.15); width: 180px; display: none; flex-direction: column; overflow: hidden; z-index: 2000; }
+        .account-menu button { padding: 12px; border: none; background: white; cursor: pointer; font-size: 14px; text-align: left; }
 
-        /* VICTORY UI */
-        .victory-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; color: white; text-align: center; backdrop-filter: blur(5px); }
-        .victory-card { background: white; color: #2f3542; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 80%; max-width: 320px; }
-        .victory-card h2 { margin-top: 0; color: var(--primary); }
+        /* CHAT */
+        #chat-bubble { position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px; background: var(--primary); border-radius: 50%; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 999; }
+        #unread-dot { position: absolute; top: 0; right: 0; width: 15px; height: 15px; background: red; border-radius: 50%; border: 2px solid white; display: none; }
+        #chat-popup { position: fixed; bottom: 85px; right: 20px; width: 280px; max-width: calc(100% - 40px); background: white; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
+        #chat-content { height: 180px; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+
+        /* CELEBRATION EFFECTS */
+        .game-notify { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; font-size: 32px; font-weight: bold; color: var(--primary); text-shadow: 0 0 10px white; animation: fadeOut 1.5s forwards; z-index: 100; text-align: center; width: 100%; }
+        @keyframes fadeOut { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.8); } 100% { opacity: 0; transform: translate(-50%, -150%) scale(1.3); } }
+        
+        .confetti { position: fixed; width: 10px; height: 10px; top: -10px; z-index: 4000; animation: fall 3s linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+        .victory-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; backdrop-filter: blur(8px); }
     </style>
 </head>
 <body>
@@ -38,48 +49,74 @@
         <input type="text" id="auth-user" placeholder="Tên đăng nhập">
         <input type="password" id="auth-pass" placeholder="Mật khẩu">
         <button class="main-btn" onclick="auth('login')">Đăng nhập</button>
-        <button onclick="auth('reg')" style="background:none; border:none; margin-top:10px; font-size:12px; color:#666; cursor:pointer;">Đăng ký</button>
+        <button onclick="auth('reg')" style="background:none; border:none; margin-top:10px; font-size:12px; color:#666; cursor:pointer;">Đăng ký tài khoản</button>
+    </div>
+</div>
+
+<div id="menu-screen">
+    <div class="panel" style="width: 340px; text-align: center; background: transparent; box-shadow: none;">
+        <div class="account-wrapper">
+            <div class="account-box" onclick="toggleAccountMenu(event)">
+                <div class="avatar-circle" id="avatar-letter">?</div>
+                <div class="user-info" style="text-align:left">
+                    <p style="font-size:11px;color:#888;margin:0">Tài khoản</p>
+                    <p id="display-username" style="font-size:16px;font-weight:bold;margin:0">...</p>
+                </div>
+            </div>
+            <div id="account-dropdown" class="account-menu">
+                <button onclick="document.getElementById('upload-avt').click()">🖼️ Đổi ảnh </button>
+                <input type="file" id="upload-avt" accept="image/*" style="display:none" onchange="handleFileSelect(this)">
+                <button onclick="logout()" style="color:red; border-top:1px solid #eee">🚪 Đăng xuất</button>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <div class="score-card"><div>Thắng</div><div id="stat-win" style="font-size:20px; font-weight:bold">0</div></div>
+            <div class="score-card"><div>Thua</div><div id="stat-lose" style="font-size:20px; font-weight:bold">0</div></div>
+        </div>
+
+        <div class="panel">
+            <div style="font-size:12px; color:#666; margin-bottom:5px">ID của bạn: <b id="my-peer-id" style="color:red">...</b></div>
+            <input type="text" id="menu-target-id" placeholder="Nhập ID đối thủ...">
+            <button class="main-btn" onclick="connectAndPlay()">🎮 KẾT NỐI & CHƠI</button>
+        </div>
+    </div>
+</div>
+
+<div id="main-game-area" style="display:none; width: 100%; max-width: 450px;">
+    <div class="container">
+        <div class="panel" style="display:flex; justify-content: space-between; align-items: center;">
+            <div id="game-status" style="font-weight:bold; color:var(--primary);">Đang chuẩn bị...</div>
+            <button onclick="confirmExit()" style="border:1px solid red; background:none; color:red; padding:5px 10px; border-radius:8px; font-weight:bold">🏳️ ĐẦU HÀNG</button>
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <div id="my-score-box" class="score-card">
+                <div id="my-avt-game" class="avatar-circle" style="width:35px;height:35px;margin:0 auto 5px"></div>
+                <div style="font-size:11px">Bạn</div><div id="my-score-val" style="font-size:22px; font-weight:bold">0</div>
+            </div>
+            <div id="peer-score-box" class="score-card">
+                <div id="peer-avt-game" class="avatar-circle" style="width:35px;height:35px;margin:0 auto 5px"></div>
+                <div id="peer-label" style="font-size:11px">Đối thủ</div><div id="peer-score-val" style="font-size:22px; font-weight:bold">0</div>
+            </div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+</div>
+
+<div id="chat-bubble" onclick="toggleChat()"><svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg><div id="unread-dot"></div></div>
+<div id="chat-popup">
+    <div id="chat-content"></div>
+    <div style="padding:10px; display:flex; border-top:1px solid #eee">
+        <input type="text" id="chat-input" placeholder="Aa..." style="margin:0; flex:1" onkeypress="if(event.key==='Enter') sendChat()">
+        <button onclick="sendChat()" style="background:var(--primary); border:none; color:white; border-radius:8px; padding:0 10px; margin-left:5px">Gửi</button>
     </div>
 </div>
 
 <div id="victory-screen" class="victory-overlay">
-    <div class="victory-card">
-        <h2 id="victory-title">🎉 KẾT QUẢ</h2>
-        <p id="victory-msg" style="font-size: 18px; margin-bottom: 20px; color: #555;"></p>
-        <button class="main-btn" onclick="closeVictory()">Chơi ván mới</button>
-    </div>
-</div>
-
-<div class="container">
-    <div class="panel" style="display:flex; justify-content: space-between; align-items: center;">
-        <div><b id="display-name">...</b> | ID: <b id="my-peer-id" style="color:var(--p1)">...</b></div>
-        <button onclick="logout()" style="border:none; background:none; color:red; font-size:12px;">Thoát</button>
-    </div>
-
-    <div class="panel">
-        <input type="text" id="target-id" placeholder="Nhập ID đối thủ...">
-        <button id="main-action-btn" class="main-btn" onclick="manualConnect()">🎮 Kết nối & Chơi</button>
-        <div id="game-status" style="text-align:center; font-size:12px; margin-top:5px; color:blue;">Sẵn sàng</div>
-    </div>
-    
-    <div class="game-header">
-        <div id="my-score-box" class="score-card"><div id="my-label" style="font-size:12px; color:var(--p1); font-weight:bold;">Bạn</div><div id="my-score-val" style="font-size:20px; font-weight:bold">0</div></div>
-        <div id="peer-score-box" class="score-card"><div id="peer-label" style="font-size:12px; font-weight:bold;">Đối thủ</div><div id="peer-score-val" style="font-size:20px; font-weight:bold">0</div></div>
-    </div>
-    <canvas id="gameCanvas"></canvas>
-</div>
-
-<div id="chat-bubble" onclick="toggleChat()">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-    <div id="unread-dot"></div>
-</div>
-
-<div id="chat-popup">
-    <div id="chat-header"><span>💬 Chat Phòng</span><span onclick="toggleChat()" style="cursor:pointer">✕</span></div>
-    <div id="chat-content"></div>
-    <div style="padding: 10px; display: flex; gap: 5px; border-top: 1px solid #eee;">
-        <input type="text" id="chat-input" placeholder="Nhập tin nhắn..." style="margin:0; padding:8px;" onkeypress="if(event.key==='Enter') sendChat()">
-        <button class="main-btn" style="width:60px; padding:0; font-size:12px;" onclick="sendChat()">Gửi</button>
+    <div class="panel" style="width: 300px; text-align: center;">
+        <h2 id="victory-title">KẾT QUẢ</h2>
+        <p id="victory-msg" style="font-size:16px; margin: 15px 0; line-height: 1.5;"></p>
+        <button class="main-btn" onclick="backToMenu()">Về Menu</button>
     </div>
 </div>
 
@@ -87,101 +124,148 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const GRID = 8;
-    let peer, conn, myName, myRole;
+    let peer, conn, myName, myRole, myAvt;
     let SIZE, OFFSET, currentPlayer = 1, scores = {1:0, 2:0};
-    let hLines, vLines, squares;
-    let chatData = [], isChatOpen = false;
-    let gameActive = false; // QUAN TRỌNG: Chặn click khi chưa bắt đầu
+    let hLines, vLines, squares, gameActive = false, isChatOpen = false;
 
+    // --- TÀI KHOẢN ---
     function auth(type) {
         const u = document.getElementById('auth-user').value.trim(), p = document.getElementById('auth-pass').value.trim();
         if(!u || !p) return;
         let db = JSON.parse(localStorage.getItem('game_db') || '{}');
-        if(type === 'reg') { db[u] = {pass:p}; localStorage.setItem('game_db', JSON.stringify(db)); alert("Đã đăng ký!"); }
-        else if(db[u]?.pass === p) { sessionStorage.setItem('user', u); location.reload(); }
+        if(type === 'reg') { 
+            if(db[u]) return alert("Tên đã tồn tại!");
+            db[u] = {pass:p, win:0, lose:0, avt: u.charAt(0).toUpperCase()}; 
+            localStorage.setItem('game_db', JSON.stringify(db)); alert("Đã tạo tài khoản!"); 
+        } else if(db[u]?.pass === p) { sessionStorage.setItem('user', u); showMenu(); }
         else alert("Sai thông tin!");
     }
-    if(sessionStorage.getItem('user')) {
-        myName = sessionStorage.getItem('user');
-        document.getElementById('auth-screen').style.display = 'none';
-        document.getElementById('display-name').innerText = myName;
-        document.getElementById('my-label').innerText = myName;
-        initPeer();
-    }
-    function logout() { sessionStorage.removeItem('user'); location.reload(); }
 
+    function showMenu() {
+        myName = sessionStorage.getItem('user');
+        if(!myName) return;
+        let db = JSON.parse(localStorage.getItem('game_db') || '{}');
+        let stats = db[myName] || {win:0, lose:0, avt: myName.charAt(0).toUpperCase()};
+        myAvt = stats.avt;
+        document.getElementById('display-username').innerText = myName;
+        updateAvtUI('avatar-letter', myAvt);
+        document.getElementById('stat-win').innerText = stats.win || 0;
+        document.getElementById('stat-lose').innerText = stats.lose || 0;
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('menu-screen').style.display = 'flex';
+        if(!peer) initPeer();
+    }
+
+    function handleFileSelect(input) {
+        const file = input.files[0];
+        if (file) {
+            if (file.size > 500000) return alert("Ảnh quá nặng (Tối đa 500KB)");
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                myAvt = e.target.result;
+                updateAvtUI('avatar-letter', myAvt);
+                let db = JSON.parse(localStorage.getItem('game_db') || '{}');
+                if(db[myName]) { db[myName].avt = myAvt; localStorage.setItem('game_db', JSON.stringify(db)); }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function updateAvtUI(id, data) {
+        const el = document.getElementById(id);
+        if(!el) return;
+        if(data && data.startsWith('data:image')) { el.innerHTML = `<img src="${data}">`; el.style.background = "none"; }
+        else { el.innerText = data || "?"; el.style.background = "var(--primary)"; }
+    }
+
+    // --- HIỆU ỨNG ---
+    function toast(msg) {
+        const div = document.createElement('div');
+        div.className = 'game-notify'; div.innerText = msg;
+        document.querySelector('.container').appendChild(div);
+        setTimeout(() => div.remove(), 1500);
+    }
+
+    function celebration() {
+        for (let i = 0; i < 60; i++) {
+            const c = document.createElement('div');
+            c.className = 'confetti';
+            c.style.left = Math.random() * 100 + 'vw';
+            c.style.backgroundColor = ['#ff4757','#2ed573','#1e90ff','#f1c40f'][Math.floor(Math.random()*4)];
+            c.style.animationDelay = Math.random() * 2 + 's';
+            document.body.appendChild(c);
+            setTimeout(() => c.remove(), 5000);
+        }
+    }
+
+    function addChat(s, t, isSys = false) {
+        const c = document.getElementById('chat-content'), d = document.createElement('div');
+        if(isSys) d.style = "color:#888; font-style:italic; text-align:center; font-size:11px; margin:5px 0";
+        d.innerHTML = isSys ? `--- ${t} ---` : `<b>${s}:</b> ${t}`;
+        c.appendChild(d); c.scrollTop = c.scrollHeight;
+        if(!isChatOpen && !isSys) document.getElementById('unread-dot').style.display = 'block';
+    }
+
+    function sendChat() {
+        const i = document.getElementById('chat-input'), t = i.value.trim();
+        if(t && conn?.open) { conn.send({type:'chat', sender:myName, text:t}); addChat(myName, t); i.value=''; }
+    }
+
+    function toggleChat() { isChatOpen = !isChatOpen; document.getElementById('chat-popup').style.display = isChatOpen ? 'flex' : 'none'; if(isChatOpen) document.getElementById('unread-dot').style.display = 'none'; }
+
+    // --- GAME ENGINE ---
     function initPeer() {
         peer = new Peer(Math.floor(10000 + Math.random()*90000).toString());
         peer.on('open', id => document.getElementById('my-peer-id').innerText = id);
         peer.on('connection', c => { conn = c; myRole = 'host'; setupConn(); });
     }
-    function manualConnect() {
-        const id = document.getElementById('target-id').value.trim();
-        if(id) { conn = peer.connect(id); myRole = 'guest'; setupConn(); }
+
+    function connectAndPlay() {
+        const id = document.getElementById('menu-target-id').value.trim();
+        if(!id) return;
+        conn = peer.connect(id); myRole = 'guest'; setupConn();
     }
 
     function setupConn() {
         conn.on('open', () => {
-            document.getElementById('game-status').innerText = "Đã kết nối!";
-            conn.send({ type: 'name', name: myName });
-            addMsg('Hệ thống', 'Đối thủ đã sẵn sàng.', true);
-            updateBtnState('in-game');
-            resetGame();
-            gameActive = true; // Kích hoạt bàn cờ khi có người kết nối
+            document.getElementById('menu-screen').style.display = 'none';
+            document.getElementById('main-game-area').style.display = 'block';
+            document.getElementById('chat-bubble').style.display = 'flex';
+            updateAvtUI('my-avt-game', myAvt);
+            conn.send({ type: 'init', name: myName, avt: myAvt });
+            resetGame(); initCanvas(); gameActive = true;
+            toast("Sẵn sàng!");
         });
         conn.on('data', data => {
-            if(data.type === 'name') document.getElementById('peer-label').innerText = data.name;
-            if(data.type === 'chat') addMsg(data.sender, data.text);
+            if(data.type === 'init') { document.getElementById('peer-label').innerText = data.name; updateAvtUI('peer-avt-game', data.avt); }
             if(data.type === 'move') handleMove(data.r, data.c, data.isH);
-            if(data.type === 'surrender') {
-                gameActive = false;
-                showVictory("🎉 ĐỐI THỦ ĐẦU HÀNG", "Bạn đã chiến thắng ván này!");
-                updateBtnState('lobby');
+            if(data.type === 'chat') addChat(data.sender, data.text);
+            if(data.type === 'surrender') { 
+                updateStats('win'); 
+                addChat(null, "Đối thủ đã đầu hàng", true);
+                celebration();
+                showVictory("CHIẾN THẮNG 🏆", "Bạn quá mạnh, đối thủ đã xin hàng!"); 
             }
         });
-        conn.on('close', () => {
-            gameActive = false;
-            addMsg('Hệ thống', 'Đối thủ đã thoát.', true);
-            updateBtnState('lobby');
-        });
-    }
-
-    function updateBtnState(state) {
-        const btn = document.getElementById('main-action-btn');
-        if (state === 'in-game') {
-            btn.innerText = "🏳️ Đầu hàng";
-            btn.style.background = "var(--danger)";
-            btn.onclick = () => {
-                if(confirm("Xác nhận đầu hàng?")) {
-                    conn.send({ type: 'surrender' });
-                    gameActive = false;
-                    resetGame();
-                    updateBtnState('lobby');
-                }
-            };
-        } else {
-            btn.innerText = "🎮 Kết nối & Chơi";
-            btn.style.background = "var(--primary)";
-            btn.onclick = manualConnect;
-            gameActive = false; // Khóa bàn cờ khi thoát game
-        }
     }
 
     function initCanvas() {
-        const w = canvas.clientWidth; canvas.width = canvas.height = w * devicePixelRatio;
+        const w = Math.min(canvas.parentElement.clientWidth - 20, 430);
+        canvas.width = canvas.height = w * devicePixelRatio;
         ctx.scale(devicePixelRatio, devicePixelRatio);
         SIZE = (w * 0.9) / GRID; OFFSET = (w - SIZE * GRID) / 2;
         draw();
     }
+
     function resetGame() {
         hLines = Array(GRID+1).fill().map(()=>Array(GRID).fill(false));
         vLines = Array(GRID).fill().map(()=>Array(GRID+1).fill(false));
         squares = Array(GRID).fill().map(()=>Array(GRID).fill(0));
-        scores = {1:0, 2:0}; currentPlayer = 1;
-        updateUI(); draw();
+        scores = {1:0, 2:0}; currentPlayer = 1; updateUI();
     }
+
     function draw() {
-        const w = canvas.clientWidth; ctx.clearRect(0,0,w,w);
+        const w = canvas.width / devicePixelRatio; ctx.clearRect(0,0,w,w);
         for(let r=0; r<GRID; r++) for(let c=0; c<GRID; c++) if(squares[r][c]) {
             ctx.fillStyle = squares[r][c]===1 ? 'rgba(255,71,87,0.2)' : 'rgba(47,53,66,0.2)';
             ctx.fillRect(c*SIZE+OFFSET, r*SIZE+OFFSET, SIZE, SIZE);
@@ -198,12 +282,10 @@
         ctx.fillStyle = "#bbb";
         for(let r=0; r<=GRID; r++) for(let c=0; c<=GRID; c++) { ctx.beginPath(); ctx.arc(c*SIZE+OFFSET, r*SIZE+OFFSET, 2.5, 0, 7); ctx.fill(); }
     }
-    
+
     canvas.onclick = (e) => {
-        // CHỈ CHO PHÉP CLICK KHI gameActive = true
-        if(!gameActive || !conn?.open || (myRole==='host'&&currentPlayer!==1) || (myRole==='guest'&&currentPlayer!==2)) return;
-        
-        const rect = canvas.getBoundingClientRect(), x = e.clientX - rect.left - OFFSET, y = e.clientY - rect.top - OFFSET;
+        if(!gameActive || (myRole==='host'&&currentPlayer!==1) || (myRole==='guest'&&currentPlayer!==2)) return;
+        const rect = canvas.getBoundingClientRect(), x = (e.clientX - rect.left) - OFFSET, y = (e.clientY - rect.top) - OFFSET;
         let rh = Math.round(y/SIZE), ch = Math.floor(x/SIZE), rv = Math.floor(y/SIZE), cv = Math.round(x/SIZE);
         let isH = Math.abs(y - rh*SIZE) < Math.abs(x - cv*SIZE);
         let r = isH ? rh : rv, c = isH ? ch : cv;
@@ -212,42 +294,33 @@
 
     function handleMove(r, c, isH) {
         let hit = false, bonus = false;
-        if(isH && r>=0 && r<=GRID && c>=0 && c<GRID && !hLines[r][c]) { hLines[r][c]=true; hit=true; if(checkSq(r,c)|checkSq(r-1,c)) bonus=true; }
-        else if(!isH && r>=0 && r<GRID && c>=0 && c<=GRID && !vLines[r][c]) { vLines[r][c]=true; hit=true; if(checkSq(r,c)|checkSq(r,c-1)) bonus=true; }
-        if(hit) { if(!bonus) currentPlayer = currentPlayer===1?2:1; updateUI(); draw(); return true; }
+        if(isH && r>=0 && r<=GRID && !hLines[r][c]) { hLines[r][c]=true; hit=true; if(checkSq(r,c)|checkSq(r-1,c)) bonus=true; }
+        else if(!isH && c>=0 && c<=GRID && !vLines[r][c]) { vLines[r][c]=true; hit=true; if(checkSq(r,c)|checkSq(r,c-1)) bonus=true; }
+        if(hit) { 
+            if(!bonus) currentPlayer = currentPlayer===1?2:1; 
+            else toast("Cộng lượt!");
+            updateUI(); draw(); return true; 
+        }
     }
+
     function checkSq(r, c) {
         if(r>=0 && r<GRID && c>=0 && c<GRID && hLines[r][c] && hLines[r+1][c] && vLines[r][c] && vLines[r][c+1] && !squares[r][c]) {
-            squares[r][c] = currentPlayer; 
-            scores[currentPlayer]++; 
-            setTimeout(checkGameOver, 100);
-            return true;
+            squares[r][c] = currentPlayer; scores[currentPlayer]++; 
+            if(scores[1] + scores[2] === GRID*GRID) endGame(); return true;
         }
     }
 
-    function checkGameOver() {
-        let filledCount = 0;
-        for(let r=0; r<GRID; r++) for(let c=0; c<GRID; c++) if(squares[r][c] !== 0) filledCount++;
-        
-        if(filledCount === GRID * GRID) {
-            gameActive = false; // Khóa bàn cờ khi kết thúc
-            const myS = scores[myRole==='host'?1:2];
-            const peerS = scores[myRole==='host'?2:1];
-            if(myS > peerS) showVictory("🎉 CHIẾN THẮNG!", `Bạn thắng với tỉ số ${myS} - ${peerS}`);
-            else if(myS < peerS) showVictory("💀 BẠN THUA RỒI", `Tỉ số: ${myS} - ${peerS}`);
-            else showVictory("🤝 HÒA CỜ", `Cả hai đều được ${myS} điểm`);
-        }
+    function endGame() {
+        gameActive = false;
+        const myS = scores[myRole==='host'?1:2], pS = scores[myRole==='host'?2:1];
+        if(myS > pS) { updateStats('win'); celebration(); showVictory("CHIẾN THẮNG 👑", `Bạn thắng rực rỡ với tỉ số ${myS} - ${pS}!`); }
+        else if(myS < pS) { updateStats('lose'); showVictory("THẤT BẠI 🏳️", `Tỉ số: ${myS} - ${pS}. Hãy cố gắng hơn nhé!`); }
+        else showVictory("HÒA NHAU 🤝", `Trận đấu cân tài cân sức với tỉ số ${myS} - ${pS}!`);
     }
 
-    function showVictory(title, msg) {
-        gameActive = false; 
-        document.getElementById('victory-title').innerText = title;
-        document.getElementById('victory-msg').innerText = msg;
-        document.getElementById('victory-screen').style.display = 'flex';
-    }
-    function closeVictory() {
-        document.getElementById('victory-screen').style.display = 'none';
-        resetGame();
+    function updateStats(res) {
+        let db = JSON.parse(localStorage.getItem('game_db') || '{}');
+        if(db[myName]) { db[myName][res]++; localStorage.setItem('game_db', JSON.stringify(db)); }
     }
 
     function updateUI() {
@@ -256,37 +329,33 @@
         document.getElementById('peer-score-val').innerText = scores[myRole==='host'?2:1];
         document.getElementById('my-score-box').className = `score-card ${myT?'active-turn':''}`;
         document.getElementById('peer-score-box').className = `score-card ${!myT?'active-turn':''}`;
-        document.getElementById('game-status').innerText = myT ? "Lượt bạn!" : "Đang chờ đối thủ...";
+        document.getElementById('game-status').innerText = myT ? "Lượt bạn!" : "Đang chờ...";
+        if(myT && gameActive) toast("Đến lượt bạn!");
     }
 
-    function toggleChat() {
-        isChatOpen = !isChatOpen;
-        document.getElementById('chat-popup').style.display = isChatOpen ? 'flex' : 'none';
-        if(isChatOpen) { document.getElementById('unread-dot').style.display = 'none'; renderChat(); }
+    function showVictory(t, m) { 
+        const tEl = document.getElementById('victory-title');
+        tEl.innerText = t; 
+        tEl.style.color = t.includes("THẮNG") ? "var(--primary)" : (t.includes("HÒA") ? "var(--gold)" : "var(--danger)");
+        document.getElementById('victory-msg').innerText = m; 
+        document.getElementById('victory-screen').style.display='flex'; 
     }
-    function addMsg(sender, text, isSys = false) {
-        chatData.push({ sender, text, isSys });
-        if(!isChatOpen) document.getElementById('unread-dot').style.display = 'block';
-        renderChat();
+    
+    function backToMenu() { 
+        document.getElementById('main-game-area').style.display = 'none'; 
+        document.getElementById('victory-screen').style.display = 'none'; 
+        document.getElementById('chat-bubble').style.display = 'none'; 
+        document.getElementById('chat-popup').style.display = 'none'; 
+        document.getElementById('menu-screen').style.display = 'flex'; 
+        if(conn) conn.close(); showMenu(); 
     }
-    function renderChat() {
-        const box = document.getElementById('chat-content');
-        box.innerHTML = chatData.map(m => `
-            <div style="margin-bottom:4px; ${m.isSys ? 'color:#888; font-style:italic;' : ''}">
-                ${m.isSys ? '' : `<b style="color:${m.sender===myName?'var(--p1)':'#2f3542'}">${m.sender}:</b> `}${m.text}
-            </div>
-        `).join('');
-        box.scrollTop = box.scrollHeight;
-    }
-    function sendChat() {
-        const inp = document.getElementById('chat-input'), txt = inp.value.trim();
-        if(txt && conn?.open) {
-            conn.send({ type: 'chat', sender: myName, text: txt });
-            addMsg(myName, txt);
-            inp.value = '';
-        }
-    }
-    window.onload = window.onresize = initCanvas;
+    
+    function confirmExit() { if(confirm("Đầu hàng?")) { if(conn?.open) conn.send({type:'surrender'}); updateStats('lose'); backToMenu(); } }
+    function toggleAccountMenu(e) { e.stopPropagation(); const m = document.getElementById('account-dropdown'); m.style.display = m.style.display === 'flex' ? 'none' : 'flex'; }
+    window.onclick = () => document.getElementById('account-dropdown').style.display = 'none';
+    function logout() { sessionStorage.removeItem('user'); location.reload(); }
+
+    if(sessionStorage.getItem('user')) showMenu();
 </script>
 </body>
 </html>
