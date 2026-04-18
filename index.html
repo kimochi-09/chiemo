@@ -15,8 +15,7 @@
         canvas { background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; height: auto; touch-action: none; }
         .score-card { flex: 1; text-align: center; padding: 10px; border-radius: 10px; background: white; border: 2px solid #eee; transition: 0.3s; }
         .active-turn { border-color: var(--primary) !important; background: #f0fff4 !important; transform: scale(1.05); }
-
-        /* AVATAR UI */
+        
         #menu-screen { position: fixed; inset: 0; background: #f1f2f6; z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .account-wrapper { position: relative; display: flex; justify-content: center; width: 100%; margin-bottom: 25px; }
         .account-box { display: flex; align-items: center; background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); cursor: pointer; }
@@ -25,19 +24,14 @@
         .account-menu { position: absolute; top: 65px; background: white; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.15); width: 180px; display: none; flex-direction: column; overflow: hidden; z-index: 2000; }
         .account-menu button { padding: 12px; border: none; background: white; cursor: pointer; font-size: 14px; text-align: left; }
 
-        /* CHAT */
         #chat-bubble { position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px; background: var(--primary); border-radius: 50%; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 999; }
         #unread-dot { position: absolute; top: 0; right: 0; width: 15px; height: 15px; background: red; border-radius: 50%; border: 2px solid white; display: none; }
         #chat-popup { position: fixed; bottom: 85px; right: 20px; width: 280px; max-width: calc(100% - 40px); background: white; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
         #chat-content { height: 180px; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
 
-        /* CELEBRATION EFFECTS */
         .game-notify { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; font-size: 32px; font-weight: bold; color: var(--primary); text-shadow: 0 0 10px white; animation: fadeOut 1.5s forwards; z-index: 100; text-align: center; width: 100%; }
         @keyframes fadeOut { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.8); } 100% { opacity: 0; transform: translate(-50%, -150%) scale(1.3); } }
         
-        .confetti { position: fixed; width: 10px; height: 10px; top: -10px; z-index: 4000; animation: fall 3s linear forwards; }
-        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
-
         .victory-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; backdrop-filter: blur(8px); }
     </style>
 </head>
@@ -64,7 +58,7 @@
                 </div>
             </div>
             <div id="account-dropdown" class="account-menu">
-                <button onclick="document.getElementById('upload-avt').click()">🖼️ Đổi ảnh đại diện </button>
+                <button onclick="document.getElementById('upload-avt').click()">🖼️ Chọn ảnh từ máy</button>
                 <input type="file" id="upload-avt" accept="image/*" style="display:none" onchange="handleFileSelect(this)">
                 <button onclick="logout()" style="color:red; border-top:1px solid #eee">🚪 Đăng xuất</button>
             </div>
@@ -127,15 +121,14 @@
     let peer, conn, myName, myRole, myAvt;
     let SIZE, OFFSET, currentPlayer = 1, scores = {1:0, 2:0};
     let hLines, vLines, squares, gameActive = false, isChatOpen = false;
+    let isGameOver = false; // Biến kiểm soát trạng thái kết thúc game
 
-    // --- TÀI KHOẢN ---
     function auth(type) {
         const u = document.getElementById('auth-user').value.trim(), p = document.getElementById('auth-pass').value.trim();
         if(!u || !p) return;
         let db = JSON.parse(localStorage.getItem('game_db') || '{}');
         if(type === 'reg') { 
             if(db[u]) return alert("Tên đã tồn tại!");
-            // Đã chỉnh sửa: Khởi tạo win và lose về 0 ngay khi đăng ký
             db[u] = {pass:p, win:0, lose:0, avt: u.charAt(0).toUpperCase()}; 
             localStorage.setItem('game_db', JSON.stringify(db)); alert("Đã tạo tài khoản!"); 
         } else if(db[u]?.pass === p) { sessionStorage.setItem('user', u); showMenu(); }
@@ -150,7 +143,6 @@
         myAvt = stats.avt;
         document.getElementById('display-username').innerText = myName;
         updateAvtUI('avatar-letter', myAvt);
-        // Hiển thị thống kê mới nhất
         document.getElementById('stat-win').innerText = stats.win || 0;
         document.getElementById('stat-lose').innerText = stats.lose || 0;
         document.getElementById('auth-screen').style.display = 'none';
@@ -158,11 +150,9 @@
         if(!peer) initPeer();
     }
 
-    // --- LƯU TRỮ VÀ GIAO DIỆN ---
     function updateStats(res) {
         let db = JSON.parse(localStorage.getItem('game_db') || '{}');
         if(db[myName]) { 
-            // Đã chỉnh sửa: Cộng dồn kết quả một cách chính xác
             db[myName][res] = (db[myName][res] || 0) + 1; 
             localStorage.setItem('game_db', JSON.stringify(db)); 
         }
@@ -174,17 +164,13 @@
         document.getElementById('chat-bubble').style.display = 'none'; 
         document.getElementById('chat-popup').style.display = 'none'; 
         document.getElementById('menu-screen').style.display = 'flex'; 
-        
         if(conn) conn.close(); 
-        
-        // Đã chỉnh sửa: Gọi lại showMenu() để cập nhật con số thắng/thua mới lên màn hình
         showMenu(); 
     }
 
     function handleFileSelect(input) {
         const file = input.files[0];
         if (file) {
-            if (file.size > 500000) return alert("Ảnh quá nặng (Tối đa 500KB)");
             const reader = new FileReader();
             reader.onload = (e) => {
                 myAvt = e.target.result;
@@ -203,24 +189,11 @@
         else { el.innerText = data || "?"; el.style.background = "var(--primary)"; }
     }
 
-    // --- HIỆU ỨNG ---
     function toast(msg) {
         const div = document.createElement('div');
         div.className = 'game-notify'; div.innerText = msg;
         document.querySelector('.container').appendChild(div);
         setTimeout(() => div.remove(), 1500);
-    }
-
-    function celebration() {
-        for (let i = 0; i < 60; i++) {
-            const c = document.createElement('div');
-            c.className = 'confetti';
-            c.style.left = Math.random() * 100 + 'vw';
-            c.style.backgroundColor = ['#ff4757','#2ed573','#1e90ff','#f1c40f'][Math.floor(Math.random()*4)];
-            c.style.animationDelay = Math.random() * 2 + 's';
-            document.body.appendChild(c);
-            setTimeout(() => c.remove(), 5000);
-        }
     }
 
     function addChat(s, t, isSys = false) {
@@ -238,7 +211,6 @@
 
     function toggleChat() { isChatOpen = !isChatOpen; document.getElementById('chat-popup').style.display = isChatOpen ? 'flex' : 'none'; if(isChatOpen) document.getElementById('unread-dot').style.display = 'none'; }
 
-    // --- GAME ENGINE ---
     function initPeer() {
         peer = new Peer(Math.floor(10000 + Math.random()*90000).toString());
         peer.on('open', id => document.getElementById('my-peer-id').innerText = id);
@@ -253,6 +225,7 @@
 
     function setupConn() {
         conn.on('open', () => {
+            isGameOver = false; // Reset trạng thái khi bắt đầu trận mới
             document.getElementById('menu-screen').style.display = 'none';
             document.getElementById('main-game-area').style.display = 'block';
             document.getElementById('chat-bubble').style.display = 'flex';
@@ -261,15 +234,25 @@
             resetGame(); initCanvas(); gameActive = true;
             toast("Sẵn sàng!");
         });
+        
+        conn.on('close', () => {
+            // Chỉ hiện thông báo mất mạng nếu game đang chơi và CHƯA chủ động kết thúc
+            if (gameActive && !isGameOver) {
+                gameActive = false;
+                addChat(null, "Đối thủ đã mất kết nối", true);
+                updateStats('win');
+                showVictory("ĐỐI THỦ RỜI TRẬN 🔌", "Bạn thắng vì đối thủ đã mất kết nối đột ngột.");
+            }
+        });
+
         conn.on('data', data => {
             if(data.type === 'init') { document.getElementById('peer-label').innerText = data.name; updateAvtUI('peer-avt-game', data.avt); }
             if(data.type === 'move') handleMove(data.r, data.c, data.isH);
             if(data.type === 'chat') addChat(data.sender, data.text);
             if(data.type === 'surrender') { 
-                updateStats('win'); // Thắng khi đối thủ đầu hàng
-                addChat(null, "Đối thủ đã đầu hàng", true);
-                celebration();
-                showVictory("CHIẾN THẮNG 🏆", "Bạn quá mạnh, đối thủ đã xin hàng!"); 
+                isGameOver = true; // Chặn hiện thông báo mất mạng
+                updateStats('win'); 
+                showVictory("CHIẾN THẮNG 🏆", "Đối thủ đã xin hàng!"); 
             }
         });
     }
@@ -337,17 +320,11 @@
 
     function endGame() {
         gameActive = false;
+        isGameOver = true; // Đánh dấu game đã xong
         const myS = scores[myRole==='host'?1:2], pS = scores[myRole==='host'?2:1];
-        if(myS > pS) { 
-            updateStats('win'); // Đã chỉnh sửa: Lưu thắng khi kết thúc trận
-            celebration(); 
-            showVictory("CHIẾN THẮNG 👑", `Bạn thắng rực rỡ với tỉ số ${myS} - ${pS}!`); 
-        }
-        else if(myS < pS) { 
-            updateStats('lose'); // Đã chỉnh sửa: Lưu thua khi kết thúc trận
-            showVictory("THẤT BẠI 🏳️", `Tỉ số: ${myS} - ${pS}. Hãy cố gắng hơn nhé!`); 
-        }
-        else showVictory("HÒA NHAU 🤝", `Trận đấu cân tài cân sức với tỉ số ${myS} - ${pS}!`);
+        if(myS > pS) { updateStats('win'); showVictory("CHIẾN THẮNG 👑", `Tỉ số: ${myS} - ${pS}`); }
+        else if(myS < pS) { updateStats('lose'); showVictory("THẤT BẠI 🏳️", `Tỉ số: ${myS} - ${pS}`); }
+        else showVictory("HÒA NHAU 🤝", `Tỉ số: ${myS} - ${pS}`);
     }
 
     function updateUI() {
@@ -370,8 +347,9 @@
     
     function confirmExit() { 
         if(confirm("Đầu hàng?")) { 
+            isGameOver = true; // Đánh dấu chủ động kết thúc để chặn hiện thông báo mất mạng
             if(conn?.open) conn.send({type:'surrender'}); 
-            updateStats('lose'); // Đã chỉnh sửa: Lưu một trận thua khi đầu hàng
+            updateStats('lose'); 
             backToMenu(); 
         } 
     }
@@ -379,7 +357,6 @@
     function toggleAccountMenu(e) { e.stopPropagation(); const m = document.getElementById('account-dropdown'); m.style.display = m.style.display === 'flex' ? 'none' : 'flex'; }
     window.onclick = () => document.getElementById('account-dropdown').style.display = 'none';
     function logout() { sessionStorage.removeItem('user'); location.reload(); }
-
     if(sessionStorage.getItem('user')) showMenu();
 </script>
 </body>
