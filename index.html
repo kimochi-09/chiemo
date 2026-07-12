@@ -146,6 +146,36 @@
   .msg.ok{background:rgba(55,224,164,.13); color:var(--ok); border:1px solid rgba(55,224,164,.35);}
   .msg.err{background:rgba(255,92,122,.13); color:var(--danger); border:1px solid rgba(255,92,122,.35);}
 
+  .dir-toggle{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+    flex-wrap:wrap;
+  }
+  .dir-btn{
+    flex:1;
+    min-width:140px;
+    background:#12162e;
+    border:1px solid var(--border);
+    color:var(--sub);
+    padding:9px 12px;
+    border-radius:9px;
+    font-size:12.5px;
+    font-weight:600;
+    transition:.15s;
+  }
+  .dir-btn .hint{
+    display:block;
+    font-weight:400;
+    font-size:11px;
+    opacity:.7;
+    margin-top:2px;
+  }
+  .dir-btn.active{
+    background:linear-gradient(90deg, rgba(124,92,255,.25), rgba(0,212,200,.2));
+    border-color:var(--accent2);
+    color:var(--text);
+  }
   .section-title{
     font-size:13px;
     text-transform:uppercase;
@@ -290,9 +320,13 @@
     <div class="input-row">
       <div class="input-with-paste">
         <input type="text" id="lookupInput" placeholder="Ví dụ: hành, sinh, thương..." autocomplete="off" autofocus>
-        <button type="button" class="paste-btn" id="pasteBtn" title="Dán">📋</button>
+        <button type="button" class="paste-btn" id="pasteBtn" title="Dán">🔍</button>
       </div>
       <button class="btn-primary" id="lookupBtn">Tìm</button>
+    </div>
+    <div class="dir-toggle">
+      <button type="button" class="dir-btn active" data-dir="after">Từ nối phía sau <span class="hint">(hành → hành động)</span></button>
+      <button type="button" class="dir-btn" data-dir="before">Từ nối phía trước <span class="hint">(cây → cỏ cây)</span></button>
     </div>
     <div class="msg" id="lookupMsg"></div>
 
@@ -338,10 +372,15 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   var ALL_WORDS = WORD_DATA.words;
   var WORD_SET = new Set(ALL_WORDS);
   var byFirstSyllable = new Map();
+  var byLastSyllable = new Map();
   ALL_WORDS.forEach(function(w){
-    var first = w.split(' ')[0];
+    var parts = w.split(' ');
+    var first = parts[0];
+    var last = parts[parts.length-1];
     if(!byFirstSyllable.has(first)) byFirstSyllable.set(first, []);
     byFirstSyllable.get(first).push(w);
+    if(!byLastSyllable.has(last)) byLastSyllable.set(last, []);
+    byLastSyllable.get(last).push(w);
   });
 
   function isValidWord(w){ return WORD_SET.has(norm(w)); }
@@ -349,19 +388,24 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     var parts = norm(w).split(' ');
     return parts[parts.length-1];
   }
+  var direction = 'after'; // 'after': tìm từ nối phía sau (âm tiết đầu = syllable). 'before': tìm từ nối phía trước (âm tiết cuối = syllable)
+
   function getSuggestions(syllable, limit){
     limit = limit || 60;
-    var list = byFirstSyllable.get(syllable) || [];
-    // Ưu tiên các từ mà âm tiết cuối của NÓ không còn từ nào nối tiếp được (từ "cụt")
-    // -> đối phương sẽ bí, nên xếp lên đầu.
-    var sorted = list.slice().sort(function(a, b){
-      var aLast = lastSyllable(a);
-      var bLast = lastSyllable(b);
-      var aCount = (byFirstSyllable.get(aLast) || []).length;
-      var bCount = (byFirstSyllable.get(bLast) || []).length;
-      return aCount - bCount;
-    });
-    return sorted.slice(0, limit);
+    var map = direction === 'after' ? byFirstSyllable : byLastSyllable;
+    var list = map.get(syllable) || [];
+    if(direction === 'after'){
+      // Ưu tiên các từ mà âm tiết cuối của NÓ không còn từ nào nối tiếp được (từ "cụt")
+      var sorted = list.slice().sort(function(a, b){
+        var aLast = lastSyllable(a);
+        var bLast = lastSyllable(b);
+        var aCount = (byFirstSyllable.get(aLast) || []).length;
+        var bCount = (byFirstSyllable.get(bLast) || []).length;
+        return aCount - bCount;
+      });
+      return sorted.slice(0, limit);
+    }
+    return list.slice(0, limit);
   }
 
   var input = document.getElementById('lookupInput');
@@ -390,7 +434,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       chip.className = 'suggest-chip ' + (canContinue ? 'continues' : 'dead-end');
       chip.textContent = s;
       chip.addEventListener('click', function(){
-        input.value = lastSyllable(s);
+        input.value = direction === 'after' ? lastSyllable(s) : s.split(' ')[0];
         doLookup();
       });
       suggestList.appendChild(chip);
@@ -422,6 +466,16 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     input.value = '';
     input.blur();
   }
+
+  var dirButtons = document.querySelectorAll('.dir-btn');
+  dirButtons.forEach(function(b){
+    b.addEventListener('click', function(){
+      dirButtons.forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      direction = b.dataset.dir;
+      doLookup();
+    });
+  });
 
   var pasteBtn = document.getElementById('pasteBtn');
   pasteBtn.addEventListener('click', function(){
