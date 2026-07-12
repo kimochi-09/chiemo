@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>tìm từ</title>
+<title>Nối Từ Tiếng Việt</title>
 <style>
   :root{
     --bg1:#0f1226;
@@ -282,8 +282,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>nhập mà tìm</h1>
-    <p>nhập đại một từ</p>
+    <h1>🔗 Nối Từ Tiếng Việt</h1>
+    <p>Nhập âm tiết cuối để xem các từ có thể nối tiếp</p>
   </header>
 
   <div class="card">
@@ -320,7 +320,7 @@
     </p>
   </div>
 
-  <footer>yamate</footer>
+  <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · OCR bằng Tesseract.js chạy hoàn toàn trên trình duyệt.</footer>
 </div>
 
 <script>
@@ -378,8 +378,8 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   function renderSuggestions(syllable){
     var sugg = getSuggestions(syllable, 60);
     suggestList.innerHTML = '';
-    if(sugg.length ===){
-      suggestList.innerHTML = '<span class="empty-hint">hết</span>';
+    if(sugg.length === 0){
+      suggestList.innerHTML = '<span class="empty-hint">Không tìm thấy từ nào có thể nối tiếp 😅</span>';
       return;
     }
     sugg.forEach(function(s){
