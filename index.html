@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nối Từ Tiếng Việt</title>
+<title>tìm từ</title>
 <style>
   :root{
     --bg1:#0f1226;
@@ -65,6 +65,36 @@
     display:flex;
     gap:10px;
   }
+  .input-with-paste{
+    flex:1;
+    position:relative;
+    display:flex;
+    min-width:0;
+  }
+  .input-with-paste input[type=text]{
+    padding-right:46px;
+  }
+  .paste-btn{
+    position:absolute;
+    right:6px;
+    top:50%;
+    transform:translateY(-50%);
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--border);
+    color:var(--sub);
+    width:34px;
+    height:34px;
+    border-radius:9px;
+    font-size:15px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:.15s;
+  }
+  .paste-btn:hover{
+    color:var(--accent2);
+    border-color:var(--accent2);
+  }
   @media (max-width: 480px){
     .input-row{
       flex-direction:column;
@@ -77,6 +107,7 @@
   input[type=text]{
     flex:1;
     min-width:0;
+    width:100%;
     background:#11142b;
     border:1.5px solid var(--border);
     color:var(--text);
@@ -142,6 +173,24 @@
     border-color:var(--accent2);
     color:var(--accent2);
     transform:translateY(-1px);
+  }
+  .suggest-chip.dead-end{
+    background:rgba(55,224,164,.13);
+    border-color:rgba(55,224,164,.45);
+    color:var(--ok);
+  }
+  .suggest-chip.dead-end:hover{
+    border-color:var(--ok);
+    color:var(--ok);
+  }
+  .suggest-chip.continues{
+    background:rgba(255,92,122,.1);
+    border-color:rgba(255,92,122,.35);
+    color:var(--danger);
+  }
+  .suggest-chip.continues:hover{
+    border-color:var(--danger);
+    color:var(--danger);
   }
   .empty-hint{
     color:var(--sub);
@@ -233,13 +282,16 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>🔗 Nối Từ Tiếng Việt</h1>
-    <p>Nhập âm tiết cuối để xem các từ có thể nối tiếp</p>
+    <h1>nhập mà tìm</h1>
+    <p>nhập đại một từ</p>
   </header>
 
   <div class="card">
     <div class="input-row">
-      <input type="text" id="lookupInput" placeholder="Ví dụ: hành, sinh, thương..." autocomplete="off" autofocus>
+      <div class="input-with-paste">
+        <input type="text" id="lookupInput" placeholder="Ví dụ: hành, sinh, thương..." autocomplete="off" autofocus>
+        <button type="button" class="paste-btn" id="pasteBtn" title="Dán">📋</button>
+      </div>
       <button class="btn-primary" id="lookupBtn">Tìm</button>
     </div>
     <div class="msg" id="lookupMsg"></div>
@@ -268,7 +320,7 @@
     </p>
   </div>
 
-  <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · OCR bằng Tesseract.js chạy hoàn toàn trên trình duyệt.</footer>
+  <footer>yamate</footer>
 </div>
 
 <script>
@@ -326,14 +378,16 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   function renderSuggestions(syllable){
     var sugg = getSuggestions(syllable, 60);
     suggestList.innerHTML = '';
-    if(sugg.length === 0){
-      suggestList.innerHTML = '<span class="empty-hint">Không tìm thấy từ nào có thể nối tiếp 😅</span>';
+    if(sugg.length ===){
+      suggestList.innerHTML = '<span class="empty-hint">hết</span>';
       return;
     }
     sugg.forEach(function(s){
       var chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'suggest-chip';
+      var sLast = lastSyllable(s);
+      var canContinue = (byFirstSyllable.get(sLast) || []).length > 0;
+      chip.className = 'suggest-chip ' + (canContinue ? 'continues' : 'dead-end');
       chip.textContent = s;
       chip.addEventListener('click', function(){
         input.value = lastSyllable(s);
@@ -363,8 +417,33 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     renderSuggestions(syllable);
   }
 
-  btn.addEventListener('click', doLookup);
-  input.addEventListener('keydown', function(e){ if(e.key === 'Enter') doLookup(); });
+  function doLookupAndClear(){
+    doLookup();
+    input.value = '';
+    input.blur();
+  }
+
+  var pasteBtn = document.getElementById('pasteBtn');
+  pasteBtn.addEventListener('click', function(){
+    if(navigator.clipboard && navigator.clipboard.readText){
+      navigator.clipboard.readText().then(function(text){
+        input.value = text;
+        doLookup();
+        input.focus();
+      }).catch(function(){
+        input.focus();
+      });
+    } else {
+      input.focus();
+    }
+  });
+
+  btn.addEventListener('click', doLookupAndClear);
+  input.addEventListener('keydown', function(e){ if(e.key === 'Enter') doLookupAndClear(); });
+  input.addEventListener('paste', function(){
+    // Đợi trình duyệt điền nội dung dán vào ô input xong rồi mới tìm
+    setTimeout(doLookup, 0);
+  });
 
   // ================= CAMERA + OCR =================
   var camToggle = document.getElementById('camToggle');
