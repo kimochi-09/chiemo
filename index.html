@@ -216,6 +216,48 @@
   .suggest-chip.continues{
     color:var(--text);
   }
+  .suggest-chip.trap-risk{
+    background:rgba(255,183,0,.12);
+    border-color:rgba(255,183,0,.55);
+    color:#ffb700;
+  }
+  .suggest-chip.trap-risk:hover{
+    border-color:#ffb700;
+    color:#ffb700;
+  }
+  .suggest-chip .x-mark{
+    font-weight:800;
+    margin-right:4px;
+  }
+  .suggest-chip{
+    position:relative;
+  }
+  .suggest-chip.copied{
+    border-color:var(--accent2);
+    color:var(--accent2);
+  }
+  .copied-badge{
+    position:absolute;
+    left:50%;
+    bottom:calc(100% + 6px);
+    transform:translateX(-50%);
+    background:var(--accent2);
+    color:#032e2a;
+    font-weight:700;
+    font-size:11.5px;
+    padding:4px 9px;
+    border-radius:7px;
+    white-space:nowrap;
+    box-shadow:0 4px 12px rgba(0,0,0,.35);
+    animation: copiedPop .9s ease forwards;
+    pointer-events:none;
+  }
+  @keyframes copiedPop{
+    0%{ opacity:0; transform:translateX(-50%) translateY(4px); }
+    15%{ opacity:1; transform:translateX(-50%) translateY(0); }
+    75%{ opacity:1; }
+    100%{ opacity:0; transform:translateX(-50%) translateY(-4px); }
+  }
   .empty-hint{
     color:var(--sub);
     font-size:13.5px;
@@ -325,6 +367,9 @@
     <div class="msg" id="lookupMsg"></div>
 
     <p class="section-title">💡 Từ có thể nối tiếp</p>
+    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
+      Từ có dấu <strong style="color:#ffb700;">✗</strong> là từ <em>không nên dùng</em>: đối thủ có thể chọn ngay một từ nối khiến bạn hết đường đi tiếp.
+    </p>
     <div id="suggestList" class="suggest-list">
       <span class="empty-hint">Nhập một từ ở trên để xem gợi ý.</span>
     </div>
@@ -378,6 +423,32 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   }
   var direction = 'after'; // 'after': tìm từ nối phía sau (âm tiết đầu = syllable). 'before': tìm từ nối phía trước (âm tiết cuối = syllable)
 
+  // Lấy âm tiết "kế tiếp" của một từ theo hướng nối hiện tại,
+  // và bản đồ tra cứu tương ứng để tìm các từ có thể nối tiếp từ đó.
+  function nextSyllableOf(word){
+    return direction === 'after' ? lastSyllable(word) : word.split(' ')[0];
+  }
+  function nextLookupMap(){
+    return direction === 'after' ? byFirstSyllable : byLastSyllable;
+  }
+  // Các từ mà "đối thủ" có thể dùng để nối tiếp sau khi mình dùng `word`
+  function continuationsOf(word){
+    var ns = nextSyllableOf(word);
+    var map = nextLookupMap();
+    return (map.get(ns) || []).filter(function(x){ return x !== word; });
+  }
+  // Một từ là "cụt" nếu không còn từ nào nối tiếp được sau nó
+  function isDeadEndWord(word){
+    return continuationsOf(word).length === 0;
+  }
+  // Nếu mình dùng `word`, đối thủ có thể né mình bằng cách chọn ngay
+  // một từ khiến LƯỢT KẾ TIẾP (tức lượt của mình) bị cụt hoàn toàn không?
+  function isRiskyTrap(word){
+    var opts = continuationsOf(word);
+    if(opts.length === 0) return false; // đã tự cụt rồi, không tính là "bẫy" nữa
+    return opts.some(function(opt){ return isDeadEndWord(opt); });
+  }
+
   function getSuggestions(syllable, limit){
     limit = limit || 60;
     var map = direction === 'after' ? byFirstSyllable : byLastSyllable;
@@ -417,17 +488,55 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     sugg.forEach(function(s){
       var chip = document.createElement('button');
       chip.type = 'button';
-      var nextSyll = direction === 'after' ? lastSyllable(s) : s.split(' ')[0];
-      var nextMap = direction === 'after' ? byFirstSyllable : byLastSyllable;
-      var canContinue = (nextMap.get(nextSyll) || []).filter(function(x){ return x !== s; }).length > 0;
-      chip.className = 'suggest-chip ' + (canContinue ? 'continues' : 'dead-end');
-      chip.textContent = s;
+      var nextSyll = nextSyllableOf(s);
+      var canContinue = continuationsOf(s).length > 0;
+      var risky = canContinue && isRiskyTrap(s);
+      if(!canContinue){
+        chip.className = 'suggest-chip dead-end';
+      } else if(risky){
+        chip.className = 'suggest-chip trap-risk';
+      } else {
+        chip.className = 'suggest-chip continues';
+      }
+      if(risky){
+        var mark = document.createElement('span');
+        mark.className = 'x-mark';
+        mark.textContent = '✗';
+        chip.appendChild(mark);
+        chip.title = 'Không nên dùng: đối thủ có thể chọn một từ nối khiến bạn hết đường đi tiếp!';
+      }
+      chip.appendChild(document.createTextNode(s));
       chip.addEventListener('click', function(){
         input.value = nextSyll;
         doLookup();
       });
+      chip.addEventListener('dblclick', function(e){
+        e.preventDefault();
+        copyToClipboard(nextSyll, chip);
+      });
       suggestList.appendChild(chip);
     });
+  }
+
+  function copyToClipboard(text, chipEl){
+    function flash(){
+      if(!chipEl) return;
+      var old = chipEl.textContent;
+      chipEl.classList.add('copied');
+      var badge = document.createElement('span');
+      badge.className = 'copied-badge';
+      badge.textContent = '✓ đã chép "' + text + '"';
+      chipEl.appendChild(badge);
+      setTimeout(function(){
+        chipEl.classList.remove('copied');
+        if(badge.parentNode) badge.parentNode.removeChild(badge);
+      }, 900);
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(flash).catch(flash);
+    } else {
+      flash();
+    }
   }
 
   function doLookup(){
@@ -467,17 +576,14 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   });
 
   var pasteBtn = document.getElementById('pasteBtn');
+  pasteBtn.addEventListener('mousedown', function(e){ e.preventDefault(); });
+  pasteBtn.addEventListener('touchstart', function(e){ e.preventDefault(); }, {passive:false});
   pasteBtn.addEventListener('click', function(){
     if(navigator.clipboard && navigator.clipboard.readText){
       navigator.clipboard.readText().then(function(text){
         input.value = text;
         doLookup();
-        input.focus();
-      }).catch(function(){
-        input.focus();
-      });
-    } else {
-      input.focus();
+      }).catch(function(){});
     }
   });
 
