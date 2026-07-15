@@ -506,11 +506,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
         chip.title = 'Không nên dùng: đối thủ có thể chọn một từ nối khiến bạn hết đường đi tiếp!';
       }
       chip.appendChild(document.createTextNode(s));
-      chip.addEventListener('click', function(){
-        input.value = nextSyll;
-        doLookup();
-      });
-      chip.addEventListener('dblclick', function(e){
+      chip.addEventListener('click', function(e){
         e.preventDefault();
         copyToClipboard(nextSyll, chip);
       });
