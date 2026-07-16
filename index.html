@@ -689,7 +689,12 @@ authSubmitBtn.addEventListener('click', async ()=>{
 
   try{
     if(authMode==='login'){
-      await withTimeout(auth.signInWithEmailAndPassword(email, pass), 12000);
+      const cred = await withTimeout(auth.signInWithEmailAndPassword(email, pass), 12000);
+      state.nickname = nick;
+      // Nếu tài khoản cũ chưa có displayName (vd tạo trước khi có tính năng này), tự set lại cho đồng bộ.
+      if(cred && cred.user && !cred.user.displayName){
+        try{ await cred.user.updateProfile({displayName: nick}); }catch(e2){}
+      }
       toast('Đăng nhập thành công!');
     } else {
       const cred = await withTimeout(auth.createUserWithEmailAndPassword(email, pass), 12000);
@@ -733,7 +738,7 @@ function avatarInnerHtml(av, size){
 
 function renderAccountPanel(){
   const body = document.getElementById('accountPanelBody');
-  const nick = currentUser.displayName || state.nickname || 'Cần thủ';
+  const nick = state.nickname || currentUser.displayName || 'Cần thủ';
   const curAvatar = state.avatar || '👤';
   body.innerHTML = `
     <div style="text-align:center; padding:14px 0 4px;">
@@ -827,7 +832,7 @@ auth.onAuthStateChanged(async (user)=>{
   currentUser = user;
   if(user){
     accountBtn.classList.add('loggedIn');
-    accountLabel.textContent = user.displayName || state.nickname || 'Tài khoản';
+    accountLabel.textContent = state.nickname || user.displayName || 'Tài khoản';
     try{
       const snap = await db.ref('users/'+user.uid+'/gameState').once('value');
       const cloud = snap.val();
@@ -860,7 +865,7 @@ function updateAvatarDisplay(){
 function setupPresence(user){
   if(presenceRef){ presenceRef.remove().catch(()=>{}); }
   presenceRef = db.ref('presence/'+user.uid);
-  const nick = user.displayName || state.nickname || 'Cần thủ';
+  const nick = state.nickname || user.displayName || 'Cần thủ';
   db.ref('.info/connected').on('value', (snap)=>{
     if(snap.val()===true){
       presenceRef.onDisconnect().remove();
@@ -1307,7 +1312,7 @@ function addSystemChatMsg(text){
 function broadcastFlex(fish, weight){
   if(!currentUser) return; // only broadcast for real logged-in players
   const r = RARITIES[fish.rarity];
-  const nick = currentUser.displayName || state.nickname || 'Cần thủ';
+  const nick = state.nickname || currentUser.displayName || 'Cần thủ';
   sendChatMessage(`📢 Chúc mừng cần thủ ${nick} vừa câu được ${fish.name} (${r.label} - nặng ${weight}kg) tại Hồ Vô Cực!`, true);
 }
 
@@ -1316,7 +1321,7 @@ function sendChatMessage(text, isSystem=false){
     toast('Vui lòng đăng nhập để chat!');
     return;
   }
-  const nick = currentUser.displayName || state.nickname || 'Cần thủ';
+  const nick = state.nickname || currentUser.displayName || 'Cần thủ';
   const msg = {
     uid: currentUser.uid,
     name: nick,
