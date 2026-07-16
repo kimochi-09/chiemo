@@ -57,6 +57,7 @@
     border-bottom:1px solid rgba(255,255,255,.08); z-index:20; flex-shrink:0;
   }
   #header .stat{display:flex; align-items:center; gap:4px; font-weight:700; font-size:14px; background:rgba(255,255,255,.06); padding:5px 9px; border-radius:20px;}
+  #soundToggleBtn{border:none; font-size:15px; padding:5px 9px; line-height:1;}
   #header .stat .ic{font-size:15px;}
   #playerName{font-size:12px; color:var(--text-dim); font-weight:600;}
 
@@ -371,6 +372,7 @@
       <span id="accountLabel">Đăng nhập</span>
     </button>
     <div style="display:flex; gap:6px;">
+      <button id="soundToggleBtn" class="stat" style="cursor:pointer;"><span id="soundIcon">🔊</span></button>
       <div class="stat"><span class="ic">💰</span><span id="coinDisplay">0</span></div>
       <div class="stat"><span class="ic">🐟</span><span id="fishCountDisplay">0/60</span></div>
     </div>
@@ -487,6 +489,179 @@
 (function(){
 "use strict";
 
+/* ============== SOUND ENGINE (nhạc nền + hiệu ứng, tạo bằng Web Audio API, không cần file mp3) ============== */
+const SoundEngine = (function(){
+  let ctx = null;
+  let masterGain = null;
+  let musicGain = null;
+  let sfxGain = null;
+  let musicNodes = [];
+  let musicTimer = null;
+  let musicOn = true;
+  let unlocked = false;
+
+  function ensureCtx(){
+    if(!ctx){
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = ctx.createGain(); masterGain.gain.value = 1; masterGain.connect(ctx.destination);
+      musicGain = ctx.createGain(); musicGain.gain.value = 0.16; musicGain.connect(masterGain);
+      sfxGain = ctx.createGain(); sfxGain.gain.value = 0.5; sfxGain.connect(masterGain);
+    }
+    if(ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function unlock(){
+    if(unlocked) return;
+    unlocked = true;
+    ensureCtx();
+    if(musicOn) startMusic();
+  }
+  ['pointerdown','keydown','touchstart'].forEach(ev=>{
+    window.addEventListener(ev, unlock, {once:true, passive:true});
+  });
+
+  function tone(freq, startTime, dur, {type='sine', gain=0.5, attack=0.008, release=0.08, freqEnd=null, detune=0} = {}){
+    const c = ensureCtx();
+    const osc = c.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    if(freqEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd,1), startTime+dur);
+    if(detune) osc.detune.value = detune;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, startTime);
+    g.gain.linearRampToValueAtTime(gain, startTime+attack);
+    g.gain.exponentialRampToValueAtTime(0.001, startTime+dur+release);
+    osc.connect(g); g.connect(sfxGain);
+    osc.start(startTime);
+    osc.stop(startTime+dur+release+0.05);
+  }
+
+  function noiseBurst(startTime, dur, {gain=0.3, filterFreq=2000, type='highpass'} = {}){
+    const c = ensureCtx();
+    const bufSize = Math.max(1, Math.floor(c.sampleRate*dur));
+    const buf = c.createBuffer(1, bufSize, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<bufSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufSize);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const filt = c.createBiquadFilter();
+    filt.type = type; filt.frequency.value = filterFreq;
+    const g = c.createGain();
+    g.gain.setValueAtTime(gain, startTime);
+    g.gain.exponentialRampToValueAtTime(0.001, startTime+dur);
+    src.connect(filt); filt.connect(g); g.connect(sfxGain);
+    src.start(startTime); src.stop(startTime+dur+0.05);
+  }
+
+  const SFX = {
+    click(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(520, t, 0.05, {type:'triangle', gain:0.25}); },
+    cast(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(280, t, 0.28, {type:'sine', gain:0.35, freqEnd:110}); noiseBurst(t, 0.15, {gain:0.12, filterFreq:3500}); },
+    bite(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(880, t, 0.09, {type:'square', gain:0.22}); tone(1180, t+0.09, 0.09, {type:'square', gain:0.22}); },
+    hit(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(660, t, 0.08, {type:'triangle', gain:0.3}); tone(990, t+0.05, 0.1, {type:'triangle', gain:0.25}); },
+    miss(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(220, t, 0.18, {type:'sawtooth', gain:0.22, freqEnd:120}); },
+    escape(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(400, t, 0.35, {type:'sawtooth', gain:0.25, freqEnd:80}); noiseBurst(t+0.05, 0.25, {gain:0.15, filterFreq:1200}); },
+    catchFish(rarity){
+      if(!unlocked) return;
+      const t = ensureCtx().currentTime;
+      const scales = {
+        common:   [523.25, 659.25, 783.99],
+        uncommon: [523.25, 659.25, 783.99, 1046.5],
+        rare:     [587.33, 739.99, 880, 1174.7],
+        epic:     [659.25, 830.61, 987.77, 1318.5, 1567.98],
+        mythic:   [659.25, 830.61, 987.77, 1318.5, 1567.98, 1975.53]
+      };
+      const notes = scales[rarity] || scales.common;
+      notes.forEach((f,i)=> tone(f, t + i*0.09, 0.22, {type:'triangle', gain:0.3, release:0.15}));
+      if(rarity==='epic' || rarity==='mythic'){
+        notes.forEach((f,i)=> tone(f*2, t + i*0.09 + 0.02, 0.18, {type:'sine', gain:0.12}));
+      }
+    },
+    buy(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(440,t,0.07,{type:'square',gain:0.25}); tone(660,t+0.07,0.12,{type:'square',gain:0.25}); },
+    sell(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(700,t,0.06,{type:'sine',gain:0.28}); tone(500,t+0.06,0.09,{type:'sine',gain:0.22}); },
+    error(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(180, t, 0.15, {type:'square', gain:0.2}); },
+    open(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(392, t, 0.06, {type:'sine', gain:0.2}); tone(523.25, t+0.06, 0.08, {type:'sine', gain:0.2}); },
+    close(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(523.25, t, 0.06, {type:'sine', gain:0.18}); tone(392, t+0.05, 0.08, {type:'sine', gain:0.18}); },
+    msg(){ if(!unlocked) return; const t=ensureCtx().currentTime; tone(700, t, 0.05, {type:'sine', gain:0.15}); },
+    login(){ if(!unlocked) return; const t=ensureCtx().currentTime; [523.25,659.25,783.99,1046.5].forEach((f,i)=>tone(f,t+i*0.08,0.16,{type:'triangle',gain:0.28})); }
+  };
+
+  /* Nhạc nền: giai điệu lặp nhẹ nhàng, êm dịu kiểu biển cả, tạo bằng oscillator theo vòng lặp hợp âm */
+  const MUSIC_SCALE = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // C pentatonic-ish, êm dịu
+  const CHORD_PROG = [
+    [261.63, 329.63, 392.00],   // C
+    [220.00, 261.63, 329.63],   // Am
+    [174.61, 220.00, 261.63],   // F
+    [196.00, 246.94, 293.66]    // G
+  ];
+  let musicStep = 0;
+  let chordIdx = 0;
+
+  function scheduleMusicBar(startTime){
+    const c = ensureCtx();
+    const chord = CHORD_PROG[chordIdx % CHORD_PROG.length];
+    chordIdx++;
+    const barDur = 4.0;
+    // pad chord (dịu, nền)
+    chord.forEach(f=>{
+      const osc = c.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, startTime);
+      g.gain.linearRampToValueAtTime(0.5, startTime+0.6);
+      g.gain.linearRampToValueAtTime(0.35, startTime+barDur-0.6);
+      g.gain.linearRampToValueAtTime(0, startTime+barDur);
+      osc.connect(g); g.connect(musicGain);
+      osc.start(startTime); osc.stop(startTime+barDur+0.05);
+      musicNodes.push(osc);
+    });
+    // giai điệu lơ lửng, ngẫu nhiên nhẹ nhàng theo pentatonic, mô phỏng tiếng chuông nước
+    const noteCount = 4 + Math.floor(Math.random()*3);
+    for(let i=0;i<noteCount;i++){
+      const t = startTime + (i/noteCount)*barDur + Math.random()*0.15;
+      const note = MUSIC_SCALE[Math.floor(Math.random()*MUSIC_SCALE.length)] * (Math.random()<0.3 ? 2 : 1);
+      const osc = c.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = note;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.22, t+0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t+1.1);
+      osc.connect(g); g.connect(musicGain);
+      osc.start(t); osc.stop(t+1.2);
+      musicNodes.push(osc);
+    }
+  }
+
+  function startMusic(){
+    if(!unlocked) return;
+    stopMusic();
+    const c = ensureCtx();
+    let nextBarTime = c.currentTime + 0.1;
+    scheduleMusicBar(nextBarTime);
+    musicTimer = setInterval(()=>{
+      nextBarTime += 4.0;
+      scheduleMusicBar(nextBarTime);
+    }, 4000);
+  }
+  function stopMusic(){
+    if(musicTimer){ clearInterval(musicTimer); musicTimer=null; }
+    musicNodes.forEach(n=>{ try{ n.stop(); }catch(e){} });
+    musicNodes = [];
+  }
+
+  function setMusicOn(on){
+    musicOn = on;
+    if(on){ if(unlocked) startMusic(); }
+    else { stopMusic(); }
+  }
+  function isMusicOn(){ return musicOn; }
+
+  return { sfx: SFX, unlock, setMusicOn, isMusicOn };
+})();
+
+
 /* ============== FIREBASE INIT ============== */
 const firebaseConfig = {
   apiKey: "AIzaSyDH_skpX3D9sD3zz3iiyrHnB28BIVvIMM0",
@@ -584,6 +759,23 @@ function saveState(){
   }
 }
 loadLocalState();
+
+/* ---- Bật/tắt âm thanh ---- */
+const soundToggleBtn = document.getElementById('soundToggleBtn');
+const soundIcon = document.getElementById('soundIcon');
+let soundPref = true;
+try{ const sp = localStorage.getItem('fishingWorld_soundOn'); if(sp!==null) soundPref = sp==='1'; }catch(e){}
+SoundEngine.setMusicOn(soundPref);
+soundIcon.textContent = soundPref ? '🔊' : '🔇';
+soundToggleBtn.addEventListener('click', ()=>{
+  SoundEngine.unlock();
+  soundPref = !soundPref;
+  SoundEngine.setMusicOn(soundPref);
+  soundIcon.textContent = soundPref ? '🔊' : '🔇';
+  try{ localStorage.setItem('fishingWorld_soundOn', soundPref?'1':'0'); }catch(e){}
+  if(soundPref) SoundEngine.sfx.click();
+});
+
 
 /* ============== DOM refs ============== */
 const coinDisplay = document.getElementById('coinDisplay');
@@ -709,6 +901,7 @@ authSubmitBtn.addEventListener('click', async ()=>{
       state.nickname = nick;
       toast('Tạo tài khoản thành công!');
     }
+    SoundEngine.sfx.login();
     closeAuthModal();
   }catch(e){
     if(e && e.code === 'timeout'){
@@ -971,6 +1164,7 @@ function resetVisual(){
 }
 
 castBtn.addEventListener('click', ()=>{
+  SoundEngine.unlock();
   if(!currentUser){
     toast('Vui lòng đăng nhập để bắt đầu câu cá!');
     openAuthModal('login');
@@ -984,6 +1178,7 @@ castBtn.addEventListener('click', ()=>{
 });
 
 function startCast(){
+  SoundEngine.sfx.cast();
   fishingState='waiting';
   castBtn.disabled=true;
   statusText.textContent='Đang thả câu... chờ cá cắn câu 🌊';
@@ -1004,6 +1199,7 @@ let requiredHits = 3;
 let currentHits = 0;
 
 function biteFish(){
+  SoundEngine.sfx.bite();
   pendingFish = rollFish();
   fishingState='biting';
   fishSilhouette.style.display='block';
@@ -1084,6 +1280,7 @@ function tryReelHit(){
   const inZone = b.noMiss ? true : (rhythmPos >= zoneStart && rhythmPos <= zoneStart+zoneWidth);
 
   if(inZone){
+    SoundEngine.sfx.hit();
     currentHits++;
     comboFill.style.width = Math.round((currentHits/requiredHits)*100)+'%';
     statusText.textContent = `✅ Đúng nhịp! (${currentHits}/${requiredHits})`;
@@ -1094,6 +1291,7 @@ function tryReelHit(){
     randomizeZone(); // new zone position for next hit, keeps challenge going
   } else {
     // Miss! penalize progress and flash red, risk losing the fish
+    SoundEngine.sfx.miss();
     gameArea.classList.add('missFlash');
     setTimeout(()=>gameArea.classList.remove('missFlash'), 300);
     currentHits = Math.max(0, currentHits - 1);
@@ -1109,6 +1307,7 @@ let missCount = 0;
 const maxMisses = 3;
 
 function fishEscape(){
+  SoundEngine.sfx.escape();
   clearTimeout(biteTimeout);
   stopRhythmLoop();
   fishingState='idle';
@@ -1137,6 +1336,7 @@ function landFish(){
   if(weight > state.caughtIds[fish.id].maxWeight) state.caughtIds[fish.id].maxWeight = weight;
   saveState();
   updateHeader();
+  SoundEngine.sfx.catchFish(fish.rarity);
   showCatchPopup(fish, weight);
 
   if(fish.rarity==='epic' || fish.rarity==='mythic'){
@@ -1201,6 +1401,7 @@ function renderShop(){
       const id = btn.getAttribute('data-buy');
       const rod = RODS.find(r=>r.id===id);
       if(state.coins >= rod.price){
+        SoundEngine.sfx.buy();
         state.coins -= rod.price;
         state.ownedRods.push(id);
         state.equippedRod = id;
@@ -1210,6 +1411,7 @@ function renderShop(){
         toast(`Đã mua và trang bị ${rod.name}!`);
         addSystemChatMsg(`🎉 Cần thủ #${state.playerId} vừa tậu ${rod.name}!`);
       } else {
+        SoundEngine.sfx.error();
         toast('Không đủ xu 😢');
       }
     });
@@ -1217,6 +1419,7 @@ function renderShop(){
   list.querySelectorAll('[data-equip]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.getAttribute('data-equip');
+      SoundEngine.sfx.click();
       state.equippedRod = id;
       saveState();
       renderShop();
@@ -1280,6 +1483,7 @@ function renderInventory(){
       const fish = FISH_LIST.find(f=>f.id==id);
       const qty = state.inventory[id]||0;
       if(qty<=0) return;
+      SoundEngine.sfx.sell();
       const b = rodBonus();
       let value = fish.price*qty;
       if(b.sellBonus) value = Math.round(value*(1+b.sellBonus));
@@ -1295,6 +1499,7 @@ function renderInventory(){
   sellBtn.className='sellAllBtn';
   sellBtn.textContent = `💰 Bán tất cả (nhận ${totalValue.toLocaleString('vi-VN')} xu)`;
   sellBtn.addEventListener('click', ()=>{
+    SoundEngine.sfx.sell();
     const b = rodBonus();
     let value = totalValue;
     if(b.sellBonus) value = Math.round(value*(1+b.sellBonus));
@@ -1360,6 +1565,7 @@ function sendChatMessage(text, isSystem=false){
   };
   const chatRef = db.ref(CHAT_PATH).push();
   chatRef.set(msg).catch(()=>{ toast('Gửi tin nhắn thất bại, thử lại nhé.'); });
+  if(!isSystem) SoundEngine.sfx.msg();
 }
 
 function attachRealtimeChat(){
@@ -1418,6 +1624,8 @@ function goToGameTab(){
 }
 navBtns.forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    SoundEngine.unlock();
+    SoundEngine.sfx.open();
     navBtns.forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     const target = btn.getAttribute('data-panel');
@@ -1433,7 +1641,7 @@ navBtns.forEach(btn=>{
 
 /* ============== CLOSE BUTTONS ============== */
 document.querySelectorAll('.closeBtn[data-close]').forEach(btn=>{
-  btn.addEventListener('click', goToGameTab);
+  btn.addEventListener('click', ()=>{ SoundEngine.sfx.close(); goToGameTab(); });
 });
 
 /* ============== INIT ============== */
