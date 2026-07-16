@@ -115,8 +115,24 @@
   #accAvatarBig{
     width:72px; height:72px; border-radius:50%; background:var(--gold); color:#3a2400; font-size:32px;
     display:flex; align-items:center; justify-content:center; margin:0 auto 8px; position:relative;
-    border:none; overflow:hidden;
+    border:none; overflow:hidden; padding:0; box-sizing:border-box; -webkit-appearance:none; appearance:none;
   }
+  #accAvatarBig img{display:block;}
+  .nameRow{display:flex; align-items:center; justify-content:center; gap:6px;}
+  .nameEditBtn{
+    background:rgba(255,255,255,.08); border:none; color:var(--text-dim); font-size:12px;
+    width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .nameEditRow{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:4px;}
+  .nameEditRow input{
+    background:var(--bg-deep); border:1px solid rgba(255,255,255,.15); border-radius:8px; color:var(--text);
+    padding:7px 10px; font-size:13.5px; width:150px; text-align:center;
+  }
+  .nameEditRow button{
+    border:none; border-radius:8px; padding:7px 10px; font-weight:700; font-size:12.5px;
+  }
+  .nameEditRow .nameSaveBtn{background:var(--gold); color:#3a2400;}
+  .nameEditRow .nameCancelBtn{background:rgba(255,255,255,.08); color:var(--text);}
   #accAvatarBig .editBadge{
     position:absolute; bottom:-2px; right:-2px; width:24px; height:24px; border-radius:50%;
     background:var(--panel); border:2px solid var(--bg-deep); font-size:12px;
@@ -734,7 +750,15 @@ function renderAccountPanel(){
   body.innerHTML = `
     <div style="text-align:center; padding:14px 0 4px;">
       <button id="accAvatarBig">${avatarInnerHtml(curAvatar)}<span class="editBadge">✏️</span></button>
-      <div style="font-weight:800; font-size:16px;">${escapeHtml(nick)}</div>
+      <div id="nameDisplayWrap" class="nameRow">
+        <div style="font-weight:800; font-size:16px;">${escapeHtml(nick)}</div>
+        <button class="nameEditBtn" id="nameEditBtn" title="Đổi tên hiển thị">✏️</button>
+      </div>
+      <div id="nameEditRow" class="nameEditRow" style="display:none;">
+        <input type="text" id="nameEditInput" maxlength="20" placeholder="Tên hiển thị">
+        <button class="nameSaveBtn" id="nameSaveBtn">Lưu</button>
+        <button class="nameCancelBtn" id="nameCancelBtn">Hủy</button>
+      </div>
       <div style="font-size:12px; color:var(--text-dim); margin-top:2px;">Cần thủ đã xác thực</div>
     </div>
     <button class="uploadAvatarBtn" id="uploadAvatarBtn" style="max-width:260px; margin:0 auto 18px; display:block;">📤 Đổi ảnh đại diện</button>
@@ -767,6 +791,40 @@ function renderAccountPanel(){
     }).catch(()=> toast('Không thể xử lý ảnh này, thử ảnh khác nhé.'));
     fileInput.value = '';
   });
+
+  const nameDisplayWrap = document.getElementById('nameDisplayWrap');
+  const nameEditRow = document.getElementById('nameEditRow');
+  const nameEditInput = document.getElementById('nameEditInput');
+  document.getElementById('nameEditBtn').addEventListener('click', ()=>{
+    nameEditInput.value = nick;
+    nameDisplayWrap.style.display = 'none';
+    nameEditRow.style.display = 'flex';
+    nameEditInput.focus();
+    nameEditInput.select();
+  });
+  document.getElementById('nameCancelBtn').addEventListener('click', ()=>{
+    nameEditRow.style.display = 'none';
+    nameDisplayWrap.style.display = 'flex';
+  });
+  document.getElementById('nameSaveBtn').addEventListener('click', saveDisplayName);
+  nameEditInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') saveDisplayName();
+    if(e.key === 'Escape'){ nameEditRow.style.display='none'; nameDisplayWrap.style.display='flex'; }
+  });
+  async function saveDisplayName(){
+    const newName = nameEditInput.value.trim();
+    if(!newName){ toast('Vui lòng nhập tên hiển thị.'); return; }
+    if(newName.length < 2){ toast('Tên hiển thị cần từ 2 ký tự.'); return; }
+    state.nickname = newName;
+    saveState();
+    if(currentUser){
+      try{ await currentUser.updateProfile({displayName: newName}); }catch(e){}
+      if(presenceRef){ presenceRef.update({nickname: newName}).catch(()=>{}); }
+    }
+    accountLabel.textContent = newName;
+    renderAccountPanel();
+    toast('Đã cập nhật tên hiển thị!');
+  }
 }
 
 /* Resize + nén ảnh do người dùng tải lên thành ảnh vuông nhỏ (JPEG) để lưu gọn trong localStorage/Firebase */
