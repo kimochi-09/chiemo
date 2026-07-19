@@ -262,6 +262,81 @@
     color:var(--sub);
     font-size:13.5px;
   }
+  .suggest-chip{
+    padding-right:28px;
+  }
+  .chip-del{
+    position:absolute;
+    right:5px;
+    top:50%;
+    transform:translateY(-50%);
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:rgba(255,255,255,.08);
+    color:var(--sub);
+    font-size:11px;
+    font-weight:800;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:none;
+    cursor:pointer;
+    transition:.15s;
+  }
+  .chip-del:hover{
+    background:var(--danger);
+    color:#fff;
+  }
+  .history-label{
+    font-size:12.5px;
+    color:var(--sub);
+    font-weight:700;
+    margin:14px 0 8px;
+  }
+  .history-label:first-child{
+    margin-top:0;
+  }
+  .history-chip{
+    background:#12162e;
+    border:1px solid var(--border);
+    padding:7px 8px 7px 12px;
+    border-radius:9px;
+    font-size:13.5px;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+  }
+  .history-chip.added{
+    color:var(--ok);
+    border-color:rgba(55,224,164,.35);
+  }
+  .history-chip.removed{
+    color:var(--danger);
+    border-color:rgba(255,92,122,.35);
+    text-decoration:line-through;
+  }
+  .history-undo{
+    background:rgba(255,255,255,.08);
+    border:none;
+    color:var(--sub);
+    cursor:pointer;
+    font-size:12px;
+    font-weight:700;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-decoration:none;
+    transition:.15s;
+  }
+  .history-undo:hover{
+    background:var(--accent2);
+    color:#032e2a;
+  }
   footer{
     text-align:center;
     color:var(--sub);
@@ -388,6 +463,13 @@
     </p>
   </div>
 
+  <div class="card" style="margin-top:16px;">
+    <p class="section-title">📜 Lịch sử chỉnh sửa từ điển</p>
+    <div id="historyContent">
+      <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
+    </div>
+  </div>
+
   <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · Chỉ gồm các từ ghép 2 âm tiết.</footer>
 </div>
 
@@ -471,6 +553,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   var btn = document.getElementById('lookupBtn');
   var msg = document.getElementById('lookupMsg');
   var suggestList = document.getElementById('suggestList');
+  var lastSyllableSearched = null;
 
   function showMsg(text, type){
     msg.textContent = text;
@@ -479,6 +562,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   function hideMsg(){ msg.className = 'msg'; }
 
   function renderSuggestions(syllable){
+    lastSyllableSearched = syllable;
     var sugg = getSuggestions(syllable, 60);
     suggestList.innerHTML = '';
     if(sugg.length === 0){
@@ -510,6 +594,18 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
         e.preventDefault();
         copyToClipboard(nextSyll, chip);
       });
+
+      var delBtn = document.createElement('span');
+      delBtn.className = 'chip-del';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Xóa "' + s + '" khỏi gợi ý';
+      delBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        removeWordFromDictionary(s);
+      });
+      chip.appendChild(delBtn);
+
       suggestList.appendChild(chip);
     });
   }
@@ -642,6 +738,37 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
   }
 
+  // Làm mới lại danh sách gợi ý đang hiển thị (nếu có) sau khi từ điển thay đổi
+  function refreshCurrentSuggestions(){
+    if(lastSyllableSearched){
+      renderSuggestions(lastSyllableSearched);
+    }
+  }
+
+  // Thêm một từ vào từ điển (dùng chung cho ô nhập và các nơi khác)
+  function addWordToDictionary(w){
+    customWords.add(w);
+    removedWords.delete(w);
+    saveSet(CUSTOM_KEY, customWords);
+    saveSet(REMOVED_KEY, removedWords);
+    rebuildIndices();
+    renderHistory();
+    refreshCurrentSuggestions();
+  }
+
+  // Xóa một từ khỏi từ điển (dùng chung cho ô nhập và nút ✕ trên mỗi gợi ý)
+  function removeWordFromDictionary(w){
+    w = norm(w);
+    removedWords.add(w);
+    customWords.delete(w);
+    saveSet(CUSTOM_KEY, customWords);
+    saveSet(REMOVED_KEY, removedWords);
+    rebuildIndices();
+    showManageMsg('🗑️ Đã xóa "' + w + '" khỏi từ điển.', 'ok');
+    renderHistory();
+    refreshCurrentSuggestions();
+  }
+
   addBtn.addEventListener('click', function(){
     var w = norm(manageInput.value);
     if(!w){ return; }
@@ -649,11 +776,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       showManageMsg('❌ Chỉ thêm được từ ghép gồm đúng 2 âm tiết, vd: "an toàn".', 'err');
       return;
     }
-    customWords.add(w);
-    removedWords.delete(w);
-    saveSet(CUSTOM_KEY, customWords);
-    saveSet(REMOVED_KEY, removedWords);
-    rebuildIndices();
+    addWordToDictionary(w);
     showManageMsg('✅ Đã thêm "' + w + '" vào từ điển.', 'ok');
     manageInput.value = '';
   });
@@ -662,21 +785,83 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     var w = norm(manageInput.value);
     if(!w){ return; }
     if(!WORD_SET.has(w)){
-      showManageMsg('⚠️ "' + w + '" hiện không có trong từ điển.', 'warn');
+      showManageMsg('⚠️ "' + w + '" hiện không có trong từ điển.', 'err');
       return;
     }
-    removedWords.add(w);
-    customWords.delete(w);
-    saveSet(CUSTOM_KEY, customWords);
-    saveSet(REMOVED_KEY, removedWords);
-    rebuildIndices();
-    showManageMsg('🗑️ Đã xóa "' + w + '" khỏi từ điển.', 'ok');
+    removeWordFromDictionary(w);
     manageInput.value = '';
   });
 
   manageInput.addEventListener('keydown', function(e){
     if(e.key === 'Enter') addBtn.click();
   });
+
+  // ================= LỊCH SỬ CHỈNH SỬA =================
+  var historyContent = document.getElementById('historyContent');
+
+  function makeHistoryChip(word, kind){
+    var chip = document.createElement('span');
+    chip.className = 'history-chip ' + kind;
+    var text = document.createElement('span');
+    text.textContent = word;
+    chip.appendChild(text);
+
+    var undo = document.createElement('button');
+    undo.type = 'button';
+    undo.className = 'history-undo';
+    undo.textContent = '↺';
+    undo.title = kind === 'added'
+      ? 'Bỏ từ này ra khỏi danh sách đã thêm'
+      : 'Khôi phục từ này (bỏ khỏi danh sách đã xóa)';
+    undo.addEventListener('click', function(){
+      if(kind === 'added'){
+        customWords.delete(word);
+        saveSet(CUSTOM_KEY, customWords);
+      } else {
+        removedWords.delete(word);
+        saveSet(REMOVED_KEY, removedWords);
+      }
+      rebuildIndices();
+      renderHistory();
+      refreshCurrentSuggestions();
+    });
+    chip.appendChild(undo);
+    return chip;
+  }
+
+  function renderHistory(){
+    historyContent.innerHTML = '';
+    if(customWords.size === 0 && removedWords.size === 0){
+      historyContent.innerHTML = '<span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>';
+      return;
+    }
+    if(customWords.size > 0){
+      var addedLabel = document.createElement('p');
+      addedLabel.className = 'history-label';
+      addedLabel.textContent = '➕ Từ đã thêm (' + customWords.size + ')';
+      historyContent.appendChild(addedLabel);
+      var addedWrap = document.createElement('div');
+      addedWrap.className = 'suggest-list';
+      Array.from(customWords).sort().forEach(function(w){
+        addedWrap.appendChild(makeHistoryChip(w, 'added'));
+      });
+      historyContent.appendChild(addedWrap);
+    }
+    if(removedWords.size > 0){
+      var removedLabel = document.createElement('p');
+      removedLabel.className = 'history-label';
+      removedLabel.textContent = '🗑️ Từ đã xóa (' + removedWords.size + ')';
+      historyContent.appendChild(removedLabel);
+      var removedWrap = document.createElement('div');
+      removedWrap.className = 'suggest-list';
+      Array.from(removedWords).sort().forEach(function(w){
+        removedWrap.appendChild(makeHistoryChip(w, 'removed'));
+      });
+      historyContent.appendChild(removedWrap);
+    }
+  }
+
+  renderHistory();
 
 })();
 </script>
