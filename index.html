@@ -341,6 +341,15 @@
     background:var(--accent2);
     color:#032e2a;
   }
+  #historyDetails summary{
+    background:linear-gradient(90deg, var(--accent2), var(--accent));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  #historyDetails summary::marker{
+    color:var(--sub);
+  }
   footer{
     text-align:center;
     color:var(--sub);
@@ -468,10 +477,12 @@
   </div>
 
   <div class="card" style="margin-top:16px;">
-    <p class="section-title">📜 Lịch sử chỉnh sửa từ điển</p>
-    <div id="historyContent">
-      <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
-    </div>
+    <details id="historyDetails">
+      <summary class="section-title" style="cursor:pointer; margin:0; display:list-item;">📜 Lịch sử chỉnh sửa từ điển</summary>
+      <div id="historyContent" style="margin-top:12px;">
+        <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
+      </div>
+    </details>
   </div>
 
   <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · Chỉ gồm các từ ghép 2 âm tiết.</footer>
