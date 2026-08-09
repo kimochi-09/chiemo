@@ -232,6 +232,58 @@
   .suggest-chip{
     position:relative;
   }
+  .suggest-chip.trap-marked{
+    background:rgba(255,215,0,.14);
+    border-color:#ffd54a;
+    color:#ffd54a;
+    padding-right:56px;
+    font-weight:700;
+  }
+  .suggest-chip.trap-marked:hover{
+    border-color:#ffd54a;
+    color:#ffd54a;
+  }
+  .suggest-chip .star-mark{
+    margin-right:4px;
+  }
+  .chip-star{
+    position:absolute;
+    right:32px;
+    top:50%;
+    transform:translateY(-50%);
+    width:22px;
+    height:22px;
+    border-radius:50%;
+    background:rgba(255,255,255,.08);
+    color:var(--sub);
+    font-size:13px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:none;
+    cursor:pointer;
+    transition:.15s;
+    opacity:.55;
+  }
+  .chip-star:hover,
+  .chip-star:focus-visible{
+    background:#ffd54a;
+    color:#3a2c00;
+    opacity:1;
+    transform:translateY(-50%) scale(1.12);
+  }
+  .chip-star.active{
+    background:#ffd54a;
+    color:#3a2c00;
+    opacity:1;
+  }
+  .trap-label{
+    font-size:12.5px;
+    color:var(--sub);
+    font-weight:700;
+    margin:14px 0 8px;
+  }
   .suggest-chip.copied{
     border-color:var(--accent2);
     color:var(--accent2);
@@ -263,7 +315,7 @@
     font-size:13.5px;
   }
   .suggest-chip{
-    padding-right:32px;
+    padding-right:56px;
   }
   .chip-del{
     position:absolute;
@@ -464,6 +516,19 @@
   </div>
 
   <div class="card" style="margin-top:16px;">
+    <p class="section-title">⭐ Đánh dấu từ bẫy theo âm cuối</p>
+    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
+      Nhập một âm tiết (vd: <strong>phiệt</strong>) rồi bấm Tìm: tất cả các từ có âm cuối trùng chữ đó sẽ được đánh dấu <strong style="color:#ffb700;">★ bẫy</strong>.
+    </p>
+    <div class="input-row">
+      <input type="text" id="trapInput" placeholder="Ví dụ: phiệt" autocomplete="off">
+      <button class="btn-primary" id="trapMarkBtn">Tìm</button>
+      <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
+    </div>
+    <div class="msg" id="trapMsg"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
     <p class="section-title">➕ Thêm / Xóa từ</p>
     <div class="input-row">
       <input type="text" id="manageInput" placeholder="Nhập từ ghép 2 âm tiết, vd: an toàn" autocomplete="off">
@@ -551,8 +616,12 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     var map = direction === 'after' ? byFirstSyllable : byLastSyllable;
     var list = map.get(syllable) || [];
     if(direction === 'after'){
-      // Ưu tiên các từ mà âm tiết cuối của NÓ không còn từ nào nối tiếp được (từ "cụt")
+      // Ưu tiên: 1) từ mình đã tự đánh dấu là "bẫy", rồi 2) từ mà âm tiết cuối của NÓ
+      // không còn từ nào nối tiếp được (từ "cụt")
       var sorted = list.slice().sort(function(a, b){
+        var aTrap = trapWords.has(a) ? 0 : 1;
+        var bTrap = trapWords.has(b) ? 0 : 1;
+        if(aTrap !== bTrap) return aTrap - bTrap;
         var aLast = lastSyllable(a);
         var bLast = lastSyllable(b);
         var aCount = (byFirstSyllable.get(aLast) || []).length;
@@ -561,7 +630,12 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       });
       return sorted.slice(0, limit);
     }
-    return list.slice(0, limit);
+    var sortedBefore = list.slice().sort(function(a, b){
+      var aTrap = trapWords.has(a) ? 0 : 1;
+      var bTrap = trapWords.has(b) ? 0 : 1;
+      return aTrap - bTrap;
+    });
+    return sortedBefore.slice(0, limit);
   }
 
   var input = document.getElementById('lookupInput');
@@ -590,14 +664,23 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       var nextSyll = nextSyllableOf(s);
       var canContinue = continuationsOf(s).length > 0;
       var risky = canContinue && isRiskyTrap(s);
-      if(!canContinue){
+      var marked = isTrapWord(s);
+      if(marked){
+        chip.className = 'suggest-chip trap-marked';
+      } else if(!canContinue){
         chip.className = 'suggest-chip dead-end';
       } else if(risky){
         chip.className = 'suggest-chip trap-risk';
       } else {
         chip.className = 'suggest-chip continues';
       }
-      if(risky){
+      if(marked){
+        var star = document.createElement('span');
+        star.className = 'star-mark';
+        star.textContent = '★';
+        chip.appendChild(star);
+        chip.title = 'Từ bạn tự đánh dấu là "bẫy" — ưu tiên dùng để dễ thắng.';
+      } else if(risky){
         var mark = document.createElement('span');
         mark.className = 'x-mark';
         mark.textContent = '✗';
@@ -711,6 +794,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
 
   var CUSTOM_KEY = 'noitu_custom_words_v1';
   var REMOVED_KEY = 'noitu_removed_words_v1';
+  var TRAP_KEY = 'noitu_trap_words_v1';
 
   function loadSet(key){
     try{
@@ -724,6 +808,64 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
 
   var customWords = loadSet(CUSTOM_KEY);
   var removedWords = loadSet(REMOVED_KEY);
+  var trapWords = loadSet(TRAP_KEY);
+
+  function isTrapWord(w){ return trapWords.has(w); }
+  function toggleTrapWord(w){
+    if(trapWords.has(w)){ trapWords.delete(w); }
+    else{ trapWords.add(w); }
+    saveSet(TRAP_KEY, trapWords);
+    refreshCurrentSuggestions();
+  }
+
+  // ================= ĐÁNH DẤU BẪY HÀNG LOẠT THEO ÂM CUỐI =================
+  var trapInput = document.getElementById('trapInput');
+  var trapMarkBtn = document.getElementById('trapMarkBtn');
+  var trapUnmarkBtn = document.getElementById('trapUnmarkBtn');
+  var trapMsg = document.getElementById('trapMsg');
+
+  function showTrapMsg(text, type){
+    trapMsg.textContent = text;
+    trapMsg.className = 'msg show ' + type;
+  }
+
+  // Tất cả các từ (trong toàn bộ từ điển) có âm cuối trùng với `syllable`
+  function wordsEndingWith(syllable){
+    return byLastSyllable.get(syllable) || [];
+  }
+
+  trapMarkBtn.addEventListener('click', function(){
+    var syllable = norm(trapInput.value).split(' ').pop();
+    if(!syllable){ return; }
+    var words = wordsEndingWith(syllable);
+    if(words.length === 0){
+      showTrapMsg('❌ Không có từ nào có âm cuối là "' + syllable + '".', 'err');
+      return;
+    }
+    words.forEach(function(w){ trapWords.add(w); });
+    saveSet(TRAP_KEY, trapWords);
+    refreshCurrentSuggestions();
+    showTrapMsg('⭐ Đã đánh dấu bẫy cho ' + words.length + ' từ có âm cuối "' + syllable + '".', 'ok');
+  });
+
+  trapUnmarkBtn.addEventListener('click', function(){
+    var syllable = norm(trapInput.value).split(' ').pop();
+    if(!syllable){ return; }
+    var words = wordsEndingWith(syllable);
+    var removedCount = 0;
+    words.forEach(function(w){ if(trapWords.has(w)){ trapWords.delete(w); removedCount++; } });
+    saveSet(TRAP_KEY, trapWords);
+    refreshCurrentSuggestions();
+    if(removedCount === 0){
+      showTrapMsg('⚠️ Không có từ nào có âm cuối "' + syllable + '" đang được đánh dấu.', 'err');
+    } else {
+      showTrapMsg('🗑️ Đã bỏ đánh dấu bẫy cho ' + removedCount + ' từ có âm cuối "' + syllable + '".', 'ok');
+    }
+  });
+
+  trapInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') trapMarkBtn.click();
+  });
 
   // Áp dụng từ tự thêm / đã xóa vào bộ từ điển đang dùng
   function rebuildIndices(){
