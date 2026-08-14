@@ -225,7 +225,20 @@
     border-color:#ffb700;
     color:#ffb700;
   }
+  .suggest-chip.trap-setup{
+    background:rgba(255,224,90,.1);
+    border-color:rgba(255,224,90,.55);
+    color:#ffe05a;
+  }
+  .suggest-chip.trap-setup:hover{
+    border-color:#ffe05a;
+    color:#ffe05a;
+  }
   .suggest-chip .x-mark{
+    font-weight:800;
+    margin-right:4px;
+  }
+  .suggest-chip .setup-mark{
     font-weight:800;
     margin-right:4px;
   }
@@ -508,24 +521,12 @@
 
     <p class="section-title">💡 Từ có thể nối tiếp</p>
     <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
-      Từ có dấu <strong style="color:#ffb700;">✗</strong> là từ <em>không nên dùng</em>: đối thủ có thể chọn ngay một từ nối khiến bạn hết đường đi tiếp.
+      Từ có dấu <strong style="color:#ffb700;">✗</strong> là từ <em>không nên dùng</em>: đối thủ có thể chọn ngay một từ nối khiến bạn hết đường đi tiếp.<br>
+      Từ có dấu <strong style="color:#ffe05a;">⚡</strong> là từ <em>nên cân nhắc dùng</em>: dùng từ này có thể dồn đối thủ vào một từ mà bạn đã đánh dấu là "bẫy" (★).
     </p>
     <div id="suggestList" class="suggest-list">
       <span class="empty-hint">Nhập một từ ở trên để xem gợi ý.</span>
     </div>
-  </div>
-
-  <div class="card" style="margin-top:16px;">
-    <p class="section-title">⭐ Đánh dấu từ bẫy theo âm cuối</p>
-    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
-      Nhập một âm tiết (vd: <strong>phiệt</strong>) rồi bấm Tìm: tất cả các từ có âm cuối trùng chữ đó sẽ được đánh dấu <strong style="color:#ffb700;">★ bẫy</strong>.
-    </p>
-    <div class="input-row">
-      <input type="text" id="trapInput" placeholder="Ví dụ: phiệt" autocomplete="off">
-      <button class="btn-primary" id="trapMarkBtn">Tìm</button>
-      <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
-    </div>
-    <div class="msg" id="trapMsg"></div>
   </div>
 
   <div class="card" style="margin-top:16px;">
@@ -548,6 +549,19 @@
         <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
       </div>
     </details>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <p class="section-title">⭐ Đánh dấu từ bẫy theo âm cuối</p>
+    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
+      Nhập một âm tiết (vd: <strong>phiệt</strong>) rồi bấm Tìm: tất cả các từ có âm cuối trùng chữ đó sẽ được đánh dấu <strong style="color:#ffb700;">★ bẫy</strong>.
+    </p>
+    <div class="input-row">
+      <input type="text" id="trapInput" placeholder="Ví dụ: phiệt" autocomplete="off">
+      <button class="btn-primary" id="trapMarkBtn">Tìm</button>
+      <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
+    </div>
+    <div class="msg" id="trapMsg"></div>
   </div>
 
   <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · Chỉ gồm các từ ghép 2 âm tiết.</footer>
@@ -610,6 +624,14 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     if(opts.length === 0) return false; // đã tự cụt rồi, không tính là "bẫy" nữa
     return opts.some(function(opt){ return isDeadEndWord(opt); });
   }
+  // Nếu mình dùng `word`, đối thủ buộc phải chọn nối tiếp trong số các từ
+  // mà mình đã tự đánh dấu là "bẫy" (★) hay không? Nếu có, đây là từ NÊN
+  // cân nhắc dùng vì có thể dồn đối thủ vào thế bí ở lượt sau.
+  function canSetupTrap(word){
+    var opts = continuationsOf(word);
+    if(opts.length === 0) return false;
+    return opts.some(function(opt){ return trapWords.has(opt); });
+  }
 
   function getSuggestions(syllable, limit){
     limit = limit || 60;
@@ -665,12 +687,15 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       var canContinue = continuationsOf(s).length > 0;
       var risky = canContinue && isRiskyTrap(s);
       var marked = isTrapWord(s);
+      var setup = !marked && canContinue && !risky && canSetupTrap(s);
       if(marked){
         chip.className = 'suggest-chip trap-marked';
       } else if(!canContinue){
         chip.className = 'suggest-chip dead-end';
       } else if(risky){
         chip.className = 'suggest-chip trap-risk';
+      } else if(setup){
+        chip.className = 'suggest-chip trap-setup';
       } else {
         chip.className = 'suggest-chip continues';
       }
@@ -686,6 +711,12 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
         mark.textContent = '✗';
         chip.appendChild(mark);
         chip.title = 'Không nên dùng: đối thủ có thể chọn một từ nối khiến bạn hết đường đi tiếp!';
+      } else if(setup){
+        var setupMark = document.createElement('span');
+        setupMark.className = 'setup-mark';
+        setupMark.textContent = '⚡';
+        chip.appendChild(setupMark);
+        chip.title = 'Nên cân nhắc: dùng từ này có thể dồn đối thủ về phía một từ bạn đã đánh dấu là "bẫy" (★).';
       }
       chip.appendChild(document.createTextNode(s));
       chip.addEventListener('click', function(e){
