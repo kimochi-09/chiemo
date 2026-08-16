@@ -586,6 +586,8 @@
       <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
     </div>
     <div class="msg" id="trapMsg"></div>
+    <p class="trap-label" style="margin-top:16px;">Các từ đã đặt bẫy (<span id="trapWordsCount">0</span>)</p>
+    <div id="trapWordsList" class="suggest-list"></div>
   </div>
 
   <footer>Dữ liệu từ điển: Viet74K (duyet/vietnamese-wordlist) · Chỉ gồm các từ ghép 2 âm tiết.</footer>
@@ -922,6 +924,38 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     if(e.key === 'Enter') trapMarkBtn.click();
   });
 
+  // Hiển thị danh sách tất cả các từ đã được đặt bẫy (★), có thể bấm để bỏ đánh dấu
+  var trapWordsList = document.getElementById('trapWordsList');
+  var trapWordsCount = document.getElementById('trapWordsCount');
+
+  function renderTrapWords(){
+    var words = Array.from(trapWords).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+    trapWordsCount.textContent = words.length;
+    trapWordsList.innerHTML = '';
+    if(words.length === 0){
+      trapWordsList.innerHTML = '<span class="empty-hint">Chưa có từ nào được đặt bẫy.</span>';
+      return;
+    }
+    words.forEach(function(w){
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'suggest-chip trap-marked';
+      chip.title = 'Bấm để bỏ đánh dấu bẫy cho từ này';
+      var star = document.createElement('span');
+      star.className = 'star-mark';
+      star.textContent = '★';
+      chip.appendChild(star);
+      chip.appendChild(document.createTextNode(w));
+      chip.addEventListener('click', function(){
+        trapWords.delete(w);
+        saveSet(TRAP_KEY, trapWords);
+        refreshCurrentSuggestions();
+        renderTrapWords();
+      });
+      trapWordsList.appendChild(chip);
+    });
+  }
+
   // Áp dụng từ tự thêm / đã xóa vào bộ từ điển đang dùng
   function rebuildIndices(){
     WORD_SET = new Set(ALL_WORDS);
@@ -958,6 +992,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
       renderSuggestions(lastSyllableSearched);
     }
     refreshAllWordsView();
+    renderTrapWords();
   }
 
   // ================= TẤT CẢ CÁC TỪ HIỆN CÓ =================
@@ -1008,7 +1043,9 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     exportWordsBtn.addEventListener('click', function(){
       var words = Array.from(WORD_SET).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
       var content = words.join('\n');
-      var blob = new Blob([content], {type: 'text/plain;charset=utf-8'});
+      // Thêm BOM (\ufeff) để Notepad và các trình soạn thảo khác nhận đúng encoding UTF-8,
+      // tránh hiển thị lỗi phông chữ (dấu tiếng Việt bị vỡ) khi mở file.
+      var blob = new Blob(['\ufeff' + content], {type: 'text/plain;charset=utf-8'});
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
@@ -1022,6 +1059,7 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
   }
 
   renderAllWords('');
+  renderTrapWords();
 
   // Thêm một từ vào từ điển (dùng chung cho ô nhập và các nơi khác)
   function addWordToDictionary(w){
