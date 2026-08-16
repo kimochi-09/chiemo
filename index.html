@@ -358,6 +358,14 @@
     opacity:1;
     transform:translateY(-50%) scale(1.12);
   }
+  .word-chip{
+    background:#12162e;
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:6px 12px;
+    border-radius:9px;
+    font-size:13.5px;
+  }
   .history-label{
     font-size:12.5px;
     color:var(--sub);
@@ -547,6 +555,22 @@
       <summary class="section-title" style="cursor:pointer; margin:0; display:list-item;">📜 Lịch sử chỉnh sửa từ điển</summary>
       <div id="historyContent" style="margin-top:12px;">
         <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
+      </div>
+    </details>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <details id="allWordsDetails">
+      <summary class="section-title" style="cursor:pointer; margin:0; display:list-item;">📚 Tất cả các từ hiện có (<span id="allWordsCount">0</span>)</summary>
+      <div style="margin-top:12px;">
+        <div class="input-row">
+          <input type="text" id="allWordsSearch" placeholder="Lọc theo từ hoặc âm tiết..." autocomplete="off">
+          <button class="btn-primary" id="exportWordsBtn">💾 Tạo file</button>
+        </div>
+        <p class="empty-hint" style="margin-top:10px;">
+          File xuất ra sẽ chứa toàn bộ từ đang có trong từ điển hiện tại (gồm cả từ mặc định, từ bạn đã thêm, và loại trừ từ bạn đã xóa), mỗi từ một dòng.
+        </p>
+        <div id="allWordsList" class="suggest-list" style="margin-top:12px; max-height:320px; overflow-y:auto;"></div>
       </div>
     </details>
   </div>
@@ -933,7 +957,71 @@ const WORD_DATA = {"words": ["a bàng", "a du", "a dua", "a giao", "a ha", "a ho
     if(lastSyllableSearched){
       renderSuggestions(lastSyllableSearched);
     }
+    refreshAllWordsView();
   }
+
+  // ================= TẤT CẢ CÁC TỪ HIỆN CÓ =================
+  var allWordsList = document.getElementById('allWordsList');
+  var allWordsCount = document.getElementById('allWordsCount');
+  var allWordsSearch = document.getElementById('allWordsSearch');
+  var exportWordsBtn = document.getElementById('exportWordsBtn');
+  var ALL_WORDS_RENDER_LIMIT = 500;
+
+  function renderAllWords(filterText){
+    var filter = norm(filterText || '');
+    var words = Array.from(WORD_SET).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+    if(filter){
+      words = words.filter(function(w){ return w.indexOf(filter) !== -1; });
+    }
+    allWordsCount.textContent = words.length + ' từ';
+    allWordsList.innerHTML = '';
+    if(words.length === 0){
+      allWordsList.innerHTML = '<span class="empty-hint">Không có từ nào khớp.</span>';
+      return;
+    }
+    var toShow = words.slice(0, ALL_WORDS_RENDER_LIMIT);
+    toShow.forEach(function(w){
+      var chip = document.createElement('span');
+      chip.className = 'word-chip';
+      chip.textContent = w;
+      allWordsList.appendChild(chip);
+    });
+    if(words.length > ALL_WORDS_RENDER_LIMIT){
+      var note = document.createElement('p');
+      note.className = 'empty-hint';
+      note.style.width = '100%';
+      note.style.marginTop = '10px';
+      note.textContent = 'Đang hiển thị ' + ALL_WORDS_RENDER_LIMIT + '/' + words.length + ' từ. Gõ vào ô lọc để thu hẹp kết quả.';
+      allWordsList.appendChild(note);
+    }
+  }
+
+  function refreshAllWordsView(){
+    renderAllWords(allWordsSearch ? allWordsSearch.value : '');
+  }
+
+  if(allWordsSearch){
+    allWordsSearch.addEventListener('input', function(){ renderAllWords(allWordsSearch.value); });
+  }
+
+  if(exportWordsBtn){
+    exportWordsBtn.addEventListener('click', function(){
+      var words = Array.from(WORD_SET).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+      var content = words.join('\n');
+      var blob = new Blob([content], {type: 'text/plain;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      var stamp = new Date().toISOString().slice(0, 10);
+      a.download = 'danh-sach-tu-vung-' + stamp + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    });
+  }
+
+  renderAllWords('');
 
   // Thêm một từ vào từ điển (dùng chung cho ô nhập và các nơi khác)
   function addWordToDictionary(w){
