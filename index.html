@@ -134,6 +134,32 @@
     border-radius:12px;
     font-size:15px;
   }
+  .small-btn{
+    background:#12162e;
+    border:1px solid var(--border);
+    color:var(--sub);
+    font-weight:600;
+    padding:0 16px;
+    border-radius:12px;
+    font-size:13px;
+    transition:.15s;
+  }
+  .small-btn:hover{
+    border-color:var(--accent2);
+    color:var(--accent2);
+  }
+  .trap-list-collapsed{
+    max-height:0 !important;
+    overflow:hidden !important;
+    opacity:0;
+    margin:0 !important;
+    padding:0 !important;
+  }
+  #trapWordsList{
+    max-height:220px;
+    overflow-y:auto;
+    transition:max-height .25s ease, opacity .2s ease;
+  }
   .msg{
     margin-top:14px;
     padding:12px 15px;
@@ -538,7 +564,7 @@
   </div>
 
   <div class="card" style="margin-top:16px;">
-    <p class="section-title">➕ Thêm / Xóa từ</p>
+    <p class="section-title">➕ Thêm / Xóa từ (đồng bộ Firebase)</p>
     <div class="input-row">
       <input type="text" id="manageInput" placeholder="Nhập từ ghép 2 âm tiết, vd: an toàn" autocomplete="off">
       <button class="btn-primary" id="addBtn">Thêm</button>
@@ -546,17 +572,29 @@
     </div>
     <div class="msg" id="manageMsg"></div>
     <p class="empty-hint" style="margin-top:10px;">
-      Từ tự thêm chỉ lưu trên trình duyệt này (không đồng bộ). Xóa chỉ có tác dụng với từ đã có trong từ điển hoặc từ bạn tự thêm.
+      Thêm / xóa sẽ ghi lên Firebase (khotu) và cập nhật kho từ ngay. Nút <strong>Đồng bộ</strong> tải lại toàn bộ kho từ server.
     </p>
+    <div style="margin-top:10px;">
+      <button type="button" class="small-btn" id="syncBtn" style="padding:8px 14px;">🔄 Đồng bộ từ Firebase</button>
+    </div>
   </div>
 
   <div class="card" style="margin-top:16px;">
-    <details id="historyDetails">
-      <summary class="section-title" style="cursor:pointer; margin:0; display:list-item;">📜 Lịch sử chỉnh sửa từ điển</summary>
-      <div id="historyContent" style="margin-top:12px;">
-        <span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>
-      </div>
-    </details>
+    <p class="section-title">⭐ Đánh dấu từ bẫy theo âm cuối</p>
+    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
+      Nhập một âm tiết (vd: <strong>phiệt</strong>) rồi bấm Tìm: tất cả các từ có âm cuối trùng chữ đó sẽ được đánh dấu <strong style="color:#ffb700;">★ bẫy</strong>.
+    </p>
+    <div class="input-row">
+      <input type="text" id="trapInput" placeholder="Ví dụ: phiệt" autocomplete="off">
+      <button class="btn-primary" id="trapMarkBtn">Tìm</button>
+      <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
+    </div>
+    <div class="msg" id="trapMsg"></div>
+    <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
+      <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Thu gọn</button>
+    </div>
+    <div id="trapWordsList" class="suggest-list"></div>
   </div>
 
   <div class="card" style="margin-top:16px;">
@@ -573,21 +611,6 @@
         <div id="allWordsList" class="suggest-list" style="margin-top:12px; max-height:320px; overflow-y:auto;"></div>
       </div>
     </details>
-  </div>
-
-  <div class="card" style="margin-top:16px;">
-    <p class="section-title">⭐ Đánh dấu từ bẫy theo âm cuối</p>
-    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
-      Nhập một âm tiết (vd: <strong>phiệt</strong>) rồi bấm Tìm: tất cả các từ có âm cuối trùng chữ đó sẽ được đánh dấu <strong style="color:#ffb700;">★ bẫy</strong>.
-    </p>
-    <div class="input-row">
-      <input type="text" id="trapInput" placeholder="Ví dụ: phiệt" autocomplete="off">
-      <button class="btn-primary" id="trapMarkBtn">Tìm</button>
-      <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
-    </div>
-    <div class="msg" id="trapMsg"></div>
-    <p class="trap-label" style="margin-top:16px;">Các từ đã đặt bẫy (<span id="trapWordsCount">0</span>)</p>
-    <div id="trapWordsList" class="suggest-list"></div>
   </div>
 
   <footer>Dữ liệu từ điển: Firebase (khotu) · Chỉ gồm các từ ghép 2 âm tiết. · <span id="dictWordCount">Đang tải...</span></footer>
@@ -898,25 +921,60 @@
       showTrapMsg('❌ Không có từ nào có âm cuối là "' + syllable + '".', 'err');
       return;
     }
-    words.forEach(function(w){ localTrapWords.add(w); });
+    words.forEach(function(w){
+      localTrapWords.add(w);
+      firebaseTrapWords.add(w);
+    });
     saveSet(TRAP_KEY, localTrapWords);
     refreshCurrentSuggestions();
-    showTrapMsg('⭐ Đã đánh dấu bẫy cho ' + words.length + ' từ có âm cuối "' + syllable + '".', 'ok');
+    showTrapMsg('⏳ Đang ghi bẫy "' + syllable + '" (' + words.length + ' từ) lên Firebase...', 'ok');
+    // Ghi song song lên Firebase (giới hạn batch để tránh quá tải)
+    var i = 0;
+    function nextBatch(){
+      var batch = words.slice(i, i + 20);
+      if(!batch.length){
+        showTrapMsg('⭐ Đã đánh dấu bẫy "' + syllable + '" (' + words.length + ' từ) trên Firebase.', 'ok');
+        return;
+      }
+      Promise.all(batch.map(function(w){ return firebaseSetTrap(w, true); }))
+        .then(function(){ i += 20; nextBatch(); })
+        .catch(function(err){
+          showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
+        });
+    }
+    nextBatch();
   });
 
   trapUnmarkBtn.addEventListener('click', function(){
     var syllable = norm(trapInput.value).split(' ').pop();
     if(!syllable){ return; }
     var words = wordsEndingWith(syllable);
-    var removedCount = 0;
-    words.forEach(function(w){ if(localTrapWords.has(w)){ localTrapWords.delete(w); removedCount++; } });
+    if(words.length === 0){
+      showTrapMsg('⚠️ Không có từ nào có âm cuối "' + syllable + '".', 'err');
+      return;
+    }
+    words.forEach(function(w){
+      localTrapWords.delete(w);
+      firebaseTrapWords.delete(w);
+    });
     saveSet(TRAP_KEY, localTrapWords);
     refreshCurrentSuggestions();
-    if(removedCount === 0){
-      showTrapMsg('⚠️ Không có từ nào có âm cuối "' + syllable + '" đang được đánh dấu (local).', 'err');
-    } else {
-      showTrapMsg('🗑️ Đã bỏ đánh dấu bẫy cho ' + removedCount + ' từ có âm cuối "' + syllable + '".', 'ok');
+    showTrapMsg('⏳ Đang bỏ bẫy "' + syllable + '" trên Firebase...', 'ok');
+    var i = 0;
+    function nextBatch(){
+      var batch = words.slice(i, i + 20);
+      if(!batch.length){
+        showTrapMsg('🗑️ Đã bỏ đánh dấu bẫy "' + syllable + '" (' + words.length + ' từ).', 'ok');
+        renderTrapWords();
+        return;
+      }
+      Promise.all(batch.map(function(w){ return firebaseSetTrap(w, false); }))
+        .then(function(){ i += 20; nextBatch(); })
+        .catch(function(err){
+          showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
+        });
     }
+    nextBatch();
   });
 
   trapInput.addEventListener('keydown', function(e){
@@ -928,45 +986,52 @@
   var trapWordsCount = document.getElementById('trapWordsCount');
 
   function renderTrapWords(){
-    // Show union of local + firebase traps that are still in dictionary
-    var allTraps = new Set();
-    localTrapWords.forEach(function(w){ if(WORD_SET.has(w)) allTraps.add(w); });
-    firebaseTrapWords.forEach(function(w){ if(WORD_SET.has(w)) allTraps.add(w); });
-    var words = Array.from(allTraps).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
-    trapWordsCount.textContent = words.length;
+    // Gộp theo âm cuối: "tài phiệt", "thế phiệt" → chỉ hiện "phiệt"
+    var endingSet = new Set();
+    function addEnding(w){
+      if(!WORD_SET.has(w)) return;
+      var parts = w.split(' ');
+      if(parts.length >= 2) endingSet.add(parts[parts.length - 1]);
+    }
+    localTrapWords.forEach(addEnding);
+    firebaseTrapWords.forEach(addEnding);
+    var endings = Array.from(endingSet).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+    trapWordsCount.textContent = endings.length;
     trapWordsList.innerHTML = '';
-    if(words.length === 0){
-      trapWordsList.innerHTML = '<span class="empty-hint">Chưa có từ nào được đặt bẫy.</span>';
+    if(endings.length === 0){
+      trapWordsList.innerHTML = '<span class="empty-hint">Chưa có âm cuối nào được đặt bẫy.</span>';
       return;
     }
-    words.forEach(function(w){
+    endings.forEach(function(syll){
+      var wordsWithEnding = wordsEndingWith(syll);
+      var count = wordsWithEnding.length;
       var chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'suggest-chip trap-marked';
-      chip.title = localTrapWords.has(w)
-        ? 'Bấm để bỏ đánh dấu bẫy local cho từ này'
-        : 'Bẫy từ Firebase (chỉ bỏ được nếu đánh dấu local rồi bỏ)';
+      chip.title = 'Bấm để bỏ đánh dấu bẫy cho tất cả từ có âm cuối "' + syll + '" (' + count + ' từ)';
       var star = document.createElement('span');
       star.className = 'star-mark';
       star.textContent = '★';
       chip.appendChild(star);
-      chip.appendChild(document.createTextNode(w));
+      chip.appendChild(document.createTextNode(syll + (count > 1 ? ' (' + count + ')' : '')));
       chip.addEventListener('click', function(){
-        if(localTrapWords.has(w)){
+        if(!confirm('Bỏ đánh dấu bẫy cho âm cuối "' + syll + '" (' + count + ' từ) trên Firebase?')) return;
+        wordsWithEnding.forEach(function(w){
           localTrapWords.delete(w);
-          saveSet(TRAP_KEY, localTrapWords);
-        } else {
-          // If only from Firebase, add to local then remove? Or just leave.
-          // Allow user to "override" by toggling local off - if only FB, remove from display by adding a "untoggle" isn't possible without local flag.
-          // Simplest: if FB trap, clicking removes local mark if any; if only FB, we can't permanently unmark without server write.
-          // So only allow unmarking local ones.
-          if(!localTrapWords.has(w) && firebaseTrapWords.has(w)){
-            // User wants to unmark a FB trap locally — store in a "unmarked" set? Skip for simplicity.
-            return;
-          }
-        }
+          firebaseTrapWords.delete(w);
+        });
+        saveSet(TRAP_KEY, localTrapWords);
         refreshCurrentSuggestions();
         renderTrapWords();
+        var i = 0;
+        function nextBatch(){
+          var batch = wordsWithEnding.slice(i, i + 20);
+          if(!batch.length) return;
+          Promise.all(batch.map(function(w){ return firebaseSetTrap(w, false); }))
+            .then(function(){ i += 20; nextBatch(); })
+            .catch(function(err){ console.error(err); });
+        }
+        nextBatch();
       });
       trapWordsList.appendChild(chip);
     });
@@ -1080,28 +1145,77 @@
     });
   }
 
-  // Thêm một từ vào từ điển (dùng chung cho ô nhập và các nơi khác)
+  // Firebase key = encodeURIComponent(word) — khớp format kho hiện có
+  function firebaseWordPath(w){
+    return FIREBASE_DB_URL + '/words/' + encodeURIComponent(w) + '.json';
+  }
+
+  function firebasePutWord(w, trap){
+    return fetch(firebaseWordPath(w), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trap: !!trap, w: w })
+    }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function firebaseDeleteWord(w){
+    return fetch(firebaseWordPath(w), { method: 'DELETE' })
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+  }
+
+  function firebaseSetTrap(w, trap){
+    return firebasePutWord(w, trap);
+  }
+
+  // Thêm từ vào local + Firebase
   function addWordToDictionary(w){
+    w = norm(w);
     customWords.add(w);
     removedWords.delete(w);
     saveSet(CUSTOM_KEY, customWords);
     saveSet(REMOVED_KEY, removedWords);
+    // Cập nhật local ngay
+    if(ALL_WORDS.indexOf(w) === -1) ALL_WORDS.push(w);
     rebuildIndices();
-    renderHistory();
     refreshCurrentSuggestions();
+    // Ghi Firebase
+    return firebasePutWord(w, isTrapWord(w))
+      .then(function(){
+        showManageMsg('✅ Đã thêm "' + w + '" lên Firebase.', 'ok');
+      })
+      .catch(function(err){
+        showManageMsg('⚠️ Đã thêm local nhưng lỗi ghi Firebase: ' + (err.message || err), 'err');
+        console.error(err);
+      });
   }
 
-  // Xóa một từ khỏi từ điển (dùng chung cho ô nhập và nút ✕ trên mỗi gợi ý)
+  // Xóa từ khỏi local + Firebase
   function removeWordFromDictionary(w){
     w = norm(w);
     removedWords.add(w);
     customWords.delete(w);
+    localTrapWords.delete(w);
+    firebaseTrapWords.delete(w);
     saveSet(CUSTOM_KEY, customWords);
     saveSet(REMOVED_KEY, removedWords);
+    saveSet(TRAP_KEY, localTrapWords);
+    ALL_WORDS = ALL_WORDS.filter(function(x){ return x !== w; });
     rebuildIndices();
-    showManageMsg('🗑️ Đã xóa "' + w + '" khỏi từ điển.', 'ok');
-    renderHistory();
     refreshCurrentSuggestions();
+    return firebaseDeleteWord(w)
+      .then(function(){
+        showManageMsg('🗑️ Đã xóa "' + w + '" khỏi Firebase.', 'ok');
+      })
+      .catch(function(err){
+        showManageMsg('⚠️ Đã xóa local nhưng lỗi xóa Firebase: ' + (err.message || err), 'err');
+        console.error(err);
+      });
   }
 
   addBtn.addEventListener('click', function(){
@@ -1111,9 +1225,12 @@
       showManageMsg('❌ Chỉ thêm được từ ghép gồm đúng 2 âm tiết, vd: "an toàn".', 'err');
       return;
     }
-    addWordToDictionary(w);
-    showManageMsg('✅ Đã thêm "' + w + '" vào từ điển.', 'ok');
-    manageInput.value = '';
+    if(WORD_SET.has(w)){
+      showManageMsg('⚠️ "' + w + '" đã có trong từ điển.', 'err');
+      return;
+    }
+    showManageMsg('⏳ Đang thêm "' + w + '"...', 'ok');
+    addWordToDictionary(w).then(function(){ manageInput.value = ''; });
   });
 
   removeBtn.addEventListener('click', function(){
@@ -1123,85 +1240,47 @@
       showManageMsg('⚠️ "' + w + '" hiện không có trong từ điển.', 'err');
       return;
     }
-    removeWordFromDictionary(w);
-    manageInput.value = '';
+    if(!confirm('Xóa "' + w + '" khỏi Firebase và từ điển?')) return;
+    showManageMsg('⏳ Đang xóa "' + w + '"...', 'ok');
+    removeWordFromDictionary(w).then(function(){ manageInput.value = ''; });
   });
 
   manageInput.addEventListener('keydown', function(e){
     if(e.key === 'Enter') addBtn.click();
   });
 
-  // ================= LỊCH SỬ CHỈNH SỬA =================
-  var historyContent = document.getElementById('historyContent');
-
-  function makeHistoryChip(word, kind){
-    var chip = document.createElement('span');
-    chip.className = 'history-chip ' + kind;
-    var text = document.createElement('span');
-    text.textContent = word;
-    chip.appendChild(text);
-
-    var undo = document.createElement('button');
-    undo.type = 'button';
-    undo.className = 'history-undo';
-    undo.textContent = '↺';
-    undo.title = kind === 'added'
-      ? 'Bỏ từ này ra khỏi danh sách đã thêm'
-      : 'Khôi phục từ này (bỏ khỏi danh sách đã xóa)';
-    undo.addEventListener('click', function(){
-      if(kind === 'added'){
-        customWords.delete(word);
-        saveSet(CUSTOM_KEY, customWords);
-      } else {
-        removedWords.delete(word);
-        saveSet(REMOVED_KEY, removedWords);
-      }
-      rebuildIndices();
-      renderHistory();
-      refreshCurrentSuggestions();
+  var syncBtn = document.getElementById('syncBtn');
+  if(syncBtn){
+    syncBtn.addEventListener('click', function(){
+      showManageMsg('⏳ Đang đồng bộ từ Firebase...', 'ok');
+      loadWordsFromFirebase(true);
     });
-    chip.appendChild(undo);
-    return chip;
   }
 
-  function renderHistory(){
-    historyContent.innerHTML = '';
-    if(customWords.size === 0 && removedWords.size === 0){
-      historyContent.innerHTML = '<span class="empty-hint">Bạn chưa thêm hoặc xóa từ nào.</span>';
-      return;
-    }
-    if(customWords.size > 0){
-      var addedLabel = document.createElement('p');
-      addedLabel.className = 'history-label';
-      addedLabel.textContent = '➕ Từ đã thêm (' + customWords.size + ')';
-      historyContent.appendChild(addedLabel);
-      var addedWrap = document.createElement('div');
-      addedWrap.className = 'suggest-list';
-      Array.from(customWords).sort().forEach(function(w){
-        addedWrap.appendChild(makeHistoryChip(w, 'added'));
-      });
-      historyContent.appendChild(addedWrap);
-    }
-    if(removedWords.size > 0){
-      var removedLabel = document.createElement('p');
-      removedLabel.className = 'history-label';
-      removedLabel.textContent = '🗑️ Từ đã xóa (' + removedWords.size + ')';
-      historyContent.appendChild(removedLabel);
-      var removedWrap = document.createElement('div');
-      removedWrap.className = 'suggest-list';
-      Array.from(removedWords).sort().forEach(function(w){
-        removedWrap.appendChild(makeHistoryChip(w, 'removed'));
-      });
-      historyContent.appendChild(removedWrap);
-    }
+  // Thu gọn / mở rộng danh sách bẫy
+  var trapCollapseBtn = document.getElementById('trapCollapseBtn');
+  var trapListCollapsed = false;
+  if(trapCollapseBtn){
+    trapCollapseBtn.addEventListener('click', function(){
+      trapListCollapsed = !trapListCollapsed;
+      if(trapListCollapsed){
+        trapWordsList.classList.add('trap-list-collapsed');
+        trapCollapseBtn.textContent = 'Mở rộng';
+      } else {
+        trapWordsList.classList.remove('trap-list-collapsed');
+        trapCollapseBtn.textContent = 'Thu gọn';
+      }
+    });
   }
 
   // ================= TẢI KHO TỪ TỪ FIREBASE =================
-  function loadWordsFromFirebase(){
+  function loadWordsFromFirebase(fromSyncBtn){
     if(dictWordCountEl) dictWordCountEl.textContent = 'Đang tải...';
-    suggestList.innerHTML = '<span class="empty-hint">⏳ Đang tải kho từ vựng từ Firebase...</span>';
+    if(!fromSyncBtn){
+      suggestList.innerHTML = '<span class="empty-hint">⏳ Đang tải kho từ vựng từ Firebase...</span>';
+    }
 
-    fetch(FIREBASE_DB_URL + '/words.json')
+    return fetch(FIREBASE_DB_URL + '/words.json')
       .then(function(r){ return r.json(); })
       .then(function(data){
         var entries = data ? Object.values(data) : [];
@@ -1218,30 +1297,42 @@
             firebaseTrapWords.add(n);
           }
         });
-        // unique
         ALL_WORDS = Array.from(new Set(words));
+        // Sau khi sync từ server, bỏ custom/removed local lệch — dùng server làm nguồn chính
+        // Vẫn giữ customWords/removedWords cho offline, nhưng rebuildIndices sẽ merge.
+        // Để đồng bộ thật: clear local overrides khi sync tay.
+        if(fromSyncBtn){
+          customWords = new Set();
+          removedWords = new Set();
+          saveSet(CUSTOM_KEY, customWords);
+          saveSet(REMOVED_KEY, removedWords);
+        }
         rebuildIndices();
         isDictReady = true;
         updateDictCountDisplay();
         renderAllWords('');
         renderTrapWords();
-        renderHistory();
-        suggestList.innerHTML = '<span class="empty-hint">Nhập một từ ở trên để xem gợi ý. (Kho: ' + WORD_SET.size.toLocaleString('vi-VN') + ' từ)</span>';
+        if(!fromSyncBtn || !lastSyllableSearched){
+          suggestList.innerHTML = '<span class="empty-hint">Nhập một từ ở trên để xem gợi ý. (Kho: ' + WORD_SET.size.toLocaleString('vi-VN') + ' từ)</span>';
+        }
         if(lastSyllableSearched){
           renderSuggestions(lastSyllableSearched);
+        }
+        if(fromSyncBtn){
+          showManageMsg('✅ Đã đồng bộ ' + WORD_SET.size.toLocaleString('vi-VN') + ' từ từ Firebase.', 'ok');
         }
       })
       .catch(function(err){
         isDictReady = false;
         if(dictWordCountEl) dictWordCountEl.textContent = 'Lỗi tải kho từ';
         suggestList.innerHTML = '<span class="empty-hint">❌ Không tải được kho từ từ Firebase. Kiểm tra kết nối mạng.</span>';
+        if(fromSyncBtn) showManageMsg('❌ Lỗi đồng bộ Firebase.', 'err');
         console.error('Firebase load error:', err);
       });
   }
 
   // Initial empty state until Firebase loads
   rebuildIndices();
-  renderHistory();
   renderAllWords('');
   renderTrapWords();
   loadWordsFromFirebase();
