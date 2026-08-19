@@ -210,6 +210,31 @@
     margin:22px 0 12px;
     font-weight:700;
   }
+  .sugg-section{
+    width:100%;
+    margin-bottom:14px;
+  }
+  .sugg-section-title{
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    margin:0 0 8px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .sugg-section-title .dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    display:inline-block;
+  }
+  .sugg-section-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:9px;
+  }
   .suggest-list{
     display:flex;
     flex-wrap:wrap;
@@ -715,73 +740,117 @@
   }
   function hideMsg(){ msg.className = 'msg'; }
 
+  function createSuggestChip(s, kind){
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    var nextSyll = nextSyllableOf(s);
+    if(kind === 'trap'){
+      chip.className = 'suggest-chip trap-marked';
+      var star = document.createElement('span');
+      star.className = 'star-mark';
+      star.textContent = '★';
+      chip.appendChild(star);
+      chip.title = 'Từ bẫy (★) — ưu tiên dùng để dễ thắng.';
+    } else if(kind === 'dead'){
+      chip.className = 'suggest-chip dead-end';
+      var mark = document.createElement('span');
+      mark.className = 'x-mark';
+      mark.textContent = '✗';
+      chip.appendChild(mark);
+      chip.title = 'Từ cụt — hết đường nối tiếp.';
+    } else if(kind === 'risk'){
+      chip.className = 'suggest-chip trap-risk';
+      var mark2 = document.createElement('span');
+      mark2.className = 'x-mark';
+      mark2.textContent = '✗';
+      chip.appendChild(mark2);
+      chip.title = 'Không nên dùng: đối thủ có thể chọn một từ nối khiến bạn hết đường đi tiếp!';
+    } else if(kind === 'setup'){
+      chip.className = 'suggest-chip trap-setup';
+      var setupMark = document.createElement('span');
+      setupMark.className = 'setup-mark';
+      setupMark.textContent = '⚡';
+      chip.appendChild(setupMark);
+      chip.title = 'Nên cân nhắc: dùng từ này có thể dồn đối thủ về phía một từ bẫy (★).';
+    } else {
+      chip.className = 'suggest-chip continues';
+      chip.title = 'Gợi ý thường';
+    }
+    chip.appendChild(document.createTextNode(s));
+    chip.addEventListener('click', function(e){
+      e.preventDefault();
+      copyToClipboard(nextSyll, chip);
+    });
+
+    var delBtn = document.createElement('span');
+    delBtn.className = 'chip-del';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Xóa "' + s + '" khỏi từ điển';
+    delBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      if(confirm('Xóa "' + s + '" khỏi từ điển?')){
+        removeWordFromDictionary(s);
+      }
+    });
+    chip.appendChild(delBtn);
+    return chip;
+  }
+
+  function appendSection(container, title, color, items, kind){
+    if(!items.length) return;
+    var section = document.createElement('div');
+    section.className = 'sugg-section';
+    var titleEl = document.createElement('div');
+    titleEl.className = 'sugg-section-title';
+    titleEl.style.color = color;
+    titleEl.innerHTML = '<span class="dot" style="background:' + color + ';"></span>' +
+      title + ' <span style="font-weight:500;opacity:.7;">(' + items.length + ')</span>';
+    section.appendChild(titleEl);
+    var chipsWrap = document.createElement('div');
+    chipsWrap.className = 'sugg-section-chips';
+    items.forEach(function(w){
+      chipsWrap.appendChild(createSuggestChip(w, kind));
+    });
+    section.appendChild(chipsWrap);
+    container.appendChild(section);
+  }
+
   function renderSuggestions(syllable){
     lastSyllableSearched = syllable;
-    var sugg = getSuggestions(syllable, 60);
+    var sugg = getSuggestions(syllable, 80);
     suggestList.innerHTML = '';
     if(sugg.length === 0){
       suggestList.innerHTML = '<span class="empty-hint">Không tìm thấy từ nào có thể nối tiếp 😅</span>';
       return;
     }
+
+    // Phân loại giống tool helper
+    var traps = [], deads = [], setups = [], oks = [], risks = [];
     sugg.forEach(function(s){
-      var chip = document.createElement('button');
-      chip.type = 'button';
-      var nextSyll = nextSyllableOf(s);
       var canContinue = continuationsOf(s).length > 0;
-      var risky = canContinue && isRiskyTrap(s);
       var marked = isTrapWord(s);
+      var risky = canContinue && isRiskyTrap(s);
       var setup = !marked && canContinue && !risky && canSetupTrap(s);
       if(marked){
-        chip.className = 'suggest-chip trap-marked';
+        traps.push(s);
       } else if(!canContinue){
-        chip.className = 'suggest-chip dead-end';
+        deads.push(s);
       } else if(risky){
-        chip.className = 'suggest-chip trap-risk';
+        risks.push(s);
       } else if(setup){
-        chip.className = 'suggest-chip trap-setup';
+        setups.push(s);
       } else {
-        chip.className = 'suggest-chip continues';
+        oks.push(s);
       }
-      if(marked){
-        var star = document.createElement('span');
-        star.className = 'star-mark';
-        star.textContent = '★';
-        chip.appendChild(star);
-        chip.title = 'Từ bạn tự đánh dấu là "bẫy" — ưu tiên dùng để dễ thắng.';
-      } else if(risky){
-        var mark = document.createElement('span');
-        mark.className = 'x-mark';
-        mark.textContent = '✗';
-        chip.appendChild(mark);
-        chip.title = 'Không nên dùng: đối thủ có thể chọn một từ nối khiến bạn hết đường đi tiếp!';
-      } else if(setup){
-        var setupMark = document.createElement('span');
-        setupMark.className = 'setup-mark';
-        setupMark.textContent = '⚡';
-        chip.appendChild(setupMark);
-        chip.title = 'Nên cân nhắc: dùng từ này có thể dồn đối thủ về phía một từ bạn đã đánh dấu là "bẫy" (★).';
-      }
-      chip.appendChild(document.createTextNode(s));
-      chip.addEventListener('click', function(e){
-        e.preventDefault();
-        copyToClipboard(nextSyll, chip);
-      });
-
-      var delBtn = document.createElement('span');
-      delBtn.className = 'chip-del';
-      delBtn.textContent = '✕';
-      delBtn.title = 'Xóa "' + s + '" khỏi gợi ý';
-      delBtn.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(confirm('Xóa "' + s + '" khỏi từ điển?')){
-          removeWordFromDictionary(s);
-        }
-      });
-      chip.appendChild(delBtn);
-
-      suggestList.appendChild(chip);
     });
+
+    // Thứ tự hiển thị giống tool: Bẫy → Cụt → Setup → Thường → Không nên dùng
+    appendSection(suggestList, '★ Nên dùng (bẫy)', '#ffd54a', traps, 'trap');
+    appendSection(suggestList, '✗ Cụt — hết đường', '#ff5c7a', deads, 'dead');
+    appendSection(suggestList, '⚡ Có thể dồn bẫy', '#ffe05a', setups, 'setup');
+    appendSection(suggestList, 'Gợi ý thường', '#37e0a4', oks, 'ok');
+    appendSection(suggestList, '✗ Không nên dùng', '#ffb700', risks, 'risk');
   }
 
   function copyToClipboard(text, chipEl){
@@ -1310,8 +1379,6 @@
         });
         ALL_WORDS = Array.from(new Set(words));
         // Sau khi sync từ server, bỏ custom/removed local lệch — dùng server làm nguồn chính
-        // Vẫn giữ customWords/removedWords cho offline, nhưng rebuildIndices sẽ merge.
-        // Để đồng bộ thật: clear local overrides khi sync tay.
         if(fromSyncBtn){
           customWords = new Set();
           removedWords = new Set();
@@ -1349,7 +1416,7 @@
   renderAllWords('');
   renderTrapWords();
   loadWordsFromFirebase();
-  // Cập nhật liên tục mỗi 15 giây
+  // Cập nhật liên tục mỗi 15 giây (đồng bộ với tool helper)
   setInterval(function(){ loadWordsFromFirebase(false); }, 15000);
 
 })();
