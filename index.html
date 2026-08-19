@@ -537,6 +537,7 @@
   <header>
     <h1>🔗 Nối Từ Tiếng Việt</h1>
     <p>Nhập âm tiết cuối để xem các từ có thể nối tiếp</p>
+    <p id="topWordCount" style="margin:10px 0 0; font-size:16px; font-weight:700; color:var(--accent2); letter-spacing:.3px;">⏳ Đang tải kho từ...</p>
   </header>
 
   <div class="card">
@@ -1057,8 +1058,13 @@
   }
 
   function updateDictCountDisplay(){
+    var text = WORD_SET.size.toLocaleString('vi-VN') + ' từ';
     if(dictWordCountEl){
-      dictWordCountEl.textContent = WORD_SET.size.toLocaleString('vi-VN') + ' từ';
+      dictWordCountEl.textContent = text;
+    }
+    var topEl = document.getElementById('topWordCount');
+    if(topEl){
+      topEl.textContent = '📚 Kho từ hiện có: ' + text;
     }
   }
 
@@ -1275,8 +1281,13 @@
 
   // ================= TẢI KHO TỪ TỪ FIREBASE =================
   function loadWordsFromFirebase(fromSyncBtn){
-    if(dictWordCountEl) dictWordCountEl.textContent = 'Đang tải...';
-    if(!fromSyncBtn){
+    // Chỉ hiện "Đang tải" khi lần đầu (chưa sẵn sàng) hoặc khi bấm Đồng bộ
+    var topEl = document.getElementById('topWordCount');
+    if(!isDictReady || fromSyncBtn){
+      if(dictWordCountEl) dictWordCountEl.textContent = 'Đang tải...';
+      if(topEl) topEl.textContent = '⏳ Đang tải kho từ...';
+    }
+    if(!isDictReady && !fromSyncBtn){
       suggestList.innerHTML = '<span class="empty-hint">⏳ Đang tải kho từ vựng từ Firebase...</span>';
     }
 
@@ -1325,6 +1336,8 @@
       .catch(function(err){
         isDictReady = false;
         if(dictWordCountEl) dictWordCountEl.textContent = 'Lỗi tải kho từ';
+        var topEl2 = document.getElementById('topWordCount');
+        if(topEl2) topEl2.textContent = '❌ Lỗi tải kho từ';
         suggestList.innerHTML = '<span class="empty-hint">❌ Không tải được kho từ từ Firebase. Kiểm tra kết nối mạng.</span>';
         if(fromSyncBtn) showManageMsg('❌ Lỗi đồng bộ Firebase.', 'err');
         console.error('Firebase load error:', err);
@@ -1336,8 +1349,8 @@
   renderAllWords('');
   renderTrapWords();
   loadWordsFromFirebase();
-  // Refresh periodically (same as userscript)
-  setInterval(loadWordsFromFirebase, 60000);
+  // Cập nhật liên tục mỗi 15 giây
+  setInterval(function(){ loadWordsFromFirebase(false); }, 15000);
 
 })();
 </script>
