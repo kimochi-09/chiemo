@@ -616,11 +616,15 @@
       <button class="small-btn" id="trapUnmarkBtn">Bỏ đánh dấu</button>
     </div>
     <div class="msg" id="trapMsg"></div>
+    <div style="margin-top:12px;">
+      <button type="button" class="small-btn" id="uploadLocalTrapsBtn" style="padding:8px 14px;">⬆️ Tải từ bẫy cũ lên Firebase</button>
+      <span class="empty-hint" style="margin-left:8px; font-size:12px;">Đồng bộ các từ bẫy đang lưu trên máy này lên Firebase</span>
+    </div>
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
-      <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Thu gọn</button>
+      <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
     </div>
-    <div id="trapWordsList" class="suggest-list"></div>
+    <div id="trapWordsList" class="suggest-list trap-list-collapsed"></div>
   </div>
 
   <div class="card" style="margin-top:16px;">
@@ -845,11 +849,11 @@
       }
     });
 
-    // Thứ tự hiển thị giống tool: Bẫy → Cụt → Setup → Thường → Không nên dùng
+    // Thứ tự: Bẫy → Cụt → Thường → Có thể dồn bẫy → Không nên dùng
     appendSection(suggestList, '★ Nên dùng (bẫy)', '#ffd54a', traps, 'trap');
     appendSection(suggestList, '✗ Cụt — hết đường', '#ff5c7a', deads, 'dead');
-    appendSection(suggestList, '⚡ Có thể dồn bẫy', '#ffe05a', setups, 'setup');
     appendSection(suggestList, 'Gợi ý thường', '#37e0a4', oks, 'ok');
+    appendSection(suggestList, '⚡ Có thể dồn bẫy', '#ffe05a', setups, 'setup');
     appendSection(suggestList, '✗ Không nên dùng', '#ffb700', risks, 'risk');
   }
 
@@ -1332,9 +1336,9 @@
     });
   }
 
-  // Thu gọn / mở rộng danh sách bẫy
+  // Thu gọn / mở rộng danh sách bẫy — mặc định thu gọn
   var trapCollapseBtn = document.getElementById('trapCollapseBtn');
-  var trapListCollapsed = false;
+  var trapListCollapsed = true; // mặc định gọn
   if(trapCollapseBtn){
     trapCollapseBtn.addEventListener('click', function(){
       trapListCollapsed = !trapListCollapsed;
@@ -1345,6 +1349,38 @@
         trapWordsList.classList.remove('trap-list-collapsed');
         trapCollapseBtn.textContent = 'Thu gọn';
       }
+    });
+  }
+
+  // Tải từ bẫy cũ (localStorage) lên Firebase
+  var uploadLocalTrapsBtn = document.getElementById('uploadLocalTrapsBtn');
+  if(uploadLocalTrapsBtn){
+    uploadLocalTrapsBtn.addEventListener('click', function(){
+      var localList = Array.from(localTrapWords);
+      if(localList.length === 0){
+        showTrapMsg('⚠️ Không có từ bẫy nào lưu trên máy này.', 'err');
+        return;
+      }
+      if(!confirm('Tải ' + localList.length + ' từ bẫy đang lưu trên máy lên Firebase?')) return;
+      showTrapMsg('⏳ Đang tải ' + localList.length + ' từ bẫy lên Firebase...', 'ok');
+      var i = 0;
+      function nextBatch(){
+        var batch = localList.slice(i, i + 20);
+        if(!batch.length){
+          // Đánh dấu luôn vào firebaseTrapWords
+          localList.forEach(function(w){ firebaseTrapWords.add(w); });
+          renderTrapWords();
+          refreshCurrentSuggestions();
+          showTrapMsg('✅ Đã tải ' + localList.length + ' từ bẫy lên Firebase.', 'ok');
+          return;
+        }
+        Promise.all(batch.map(function(w){ return firebaseSetTrap(w, true); }))
+          .then(function(){ i += 20; nextBatch(); })
+          .catch(function(err){
+            showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
+          });
+      }
+      nextBatch();
     });
   }
 
