@@ -579,6 +579,11 @@
     </div>
     <div class="msg" id="lookupMsg"></div>
 
+    <p class="section-title">💡 Từ có thể nối tiếp</p>
+    <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
+      Từ có dấu <strong style="color:#ffb700;">✗</strong> là từ <em>không nên dùng</em>: đối thủ có thể chọn ngay một từ nối khiến bạn hết đường đi tiếp.<br>
+      Từ có dấu <strong style="color:#ffe05a;">⚡</strong> là từ <em>nên cân nhắc dùng</em>: dùng từ này có thể dồn đối thủ vào một từ mà bạn đã đánh dấu là "bẫy" (★).
+    </p>
     <div id="suggestList" class="suggest-list">
       <span class="empty-hint">Nhập một từ ở trên để xem gợi ý.</span>
     </div>
@@ -618,6 +623,7 @@
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
       <span style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="small-btn" id="trapAutoDetectBtn" style="padding:5px 12px; font-size:12px;" title="Tự tìm âm cuối mà đối thủ nối tiếp đều thua">⚡ Tự đánh dấu bẫy</button>
         <button type="button" class="small-btn" id="trapCopyEndingsBtn" style="padding:5px 12px; font-size:12px;" title="Sao chép tất cả âm cuối đã đặt bẫy">📋 Sao chép âm cuối</button>
         <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
       </span>
@@ -958,14 +964,13 @@
   var customWords = loadSet(CUSTOM_KEY);
   var removedWords = loadSet(REMOVED_KEY);
   var localTrapWords = loadSet(TRAP_KEY);
-  // Âm cuối đã được đánh dấu bẫy (để từ mới thêm cùng âm cuối tự nhận bẫy)
+  // Âm cuối đã đánh dấu bẫy (để từ mới cùng âm cuối tự nhận bẫy)
   var localTrapEndings = loadSet(TRAP_ENDINGS_KEY);
 
   // Trap = Firebase trap OR local trap mark
   function isTrapWord(w){
     return localTrapWords.has(w) || firebaseTrapWords.has(w);
   }
-  // Âm cuối này đã được đặt bẫy chưa? (từ local endings hoặc từ các từ bẫy hiện có)
   function isTrapEnding(syllable){
     if(localTrapEndings.has(syllable)) return true;
     var words = byLastSyllable.get(syllable) || [];
@@ -976,6 +981,75 @@
     else{ localTrapWords.add(w); }
     saveSet(TRAP_KEY, localTrapWords);
     refreshCurrentSuggestions();
+  }
+
+  // Phân tích theo hướng "nối phía sau" (không phụ thuộc nút direction hiện tại)
+  function continuationsAfter(word){
+    var ns = lastSyllable(word);
+    return (byFirstSyllable.get(ns) || []).filter(function(x){ return x !== word; });
+  }
+  function isDeadEndAfter(word){
+    return continuationsAfter(word).length === 0;
+  }
+  function isRiskyAfter(word){
+    var opts = continuationsAfter(word);
+    if(opts.length === 0) return false;
+    return opts.some(function(opt){ return isDeadEndAfter(opt); });
+  }
+
+  // Âm tiết S là "bẫy tự động" nếu mọi từ BẮT ĐẦU bằng S
+  // đều là từ cụt (hết đường) hoặc "không nên dùng" (đối thủ chơi là thua).
+  // Ví dụ: sau "lặt" toàn từ xấu → dồn đối thủ về "lặt" là thắng.
+  function isAutoTrapEnding(syllable){
+    var words = byFirstSyllable.get(syllable) || [];
+    if(words.length === 0) return false;
+    return words.every(function(w){
+      return isDeadEndAfter(w) || isRiskyAfter(w);
+    });
+  }
+
+  // Tìm tất cả âm tiết thỏa điều kiện bẫy tự động
+  function findAutoTrapEndings(){
+    var endings = [];
+    byFirstSyllable.forEach(function(words, syll){
+      if(words.length > 0 && isAutoTrapEnding(syll)){
+        endings.push(syll);
+      }
+    });
+    return endings.sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+  }
+
+  // Đánh dấu bẫy hàng loạt theo danh sách âm cuối (local + Firebase)
+  function markTrapEndings(endings, onProgress, onDone){
+    var allWords = [];
+    endings.forEach(function(syll){
+      localTrapEndings.add(syll);
+      (byLastSyllable.get(syll) || []).forEach(function(w){
+        localTrapWords.add(w);
+        firebaseTrapWords.add(w);
+        allWords.push(w);
+      });
+    });
+    saveSet(TRAP_KEY, localTrapWords);
+    saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
+    refreshCurrentSuggestions();
+    // Ghi Firebase theo batch
+    var unique = Array.from(new Set(allWords));
+    var i = 0;
+    function nextBatch(){
+      var batch = unique.slice(i, i + 20);
+      if(!batch.length){
+        if(onDone) onDone(unique.length, endings.length);
+        return;
+      }
+      if(onProgress) onProgress(i, unique.length);
+      Promise.all(batch.map(function(w){ return firebaseSetTrap(w, true); }))
+        .then(function(){ i += 20; nextBatch(); })
+        .catch(function(err){
+          showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
+        });
+    }
+    nextBatch();
   }
 
   // ================= ĐÁNH DẤU BẪY HÀNG LOẠT THEO ÂM CUỐI =================
@@ -1011,7 +1085,6 @@
     saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
     refreshCurrentSuggestions();
     showTrapMsg('⏳ Đang ghi bẫy "' + syllable + '" (' + words.length + ' từ) lên Firebase...', 'ok');
-    // Ghi song song lên Firebase (giới hạn batch để tránh quá tải)
     var i = 0;
     function nextBatch(){
       var batch = words.slice(i, i + 20);
@@ -1071,7 +1144,6 @@
   var trapWordsList = document.getElementById('trapWordsList');
   var trapWordsCount = document.getElementById('trapWordsCount');
 
-  // Xóa khỏi localTrapWords các từ không còn trong kho từ (đã bị xóa)
   function pruneTrapWords(){
     var changed = false;
     Array.from(localTrapWords).forEach(function(w){
@@ -1081,17 +1153,11 @@
       }
     });
     Array.from(firebaseTrapWords).forEach(function(w){
-      if(!WORD_SET.has(w)){
-        firebaseTrapWords.delete(w);
-      }
+      if(!WORD_SET.has(w)) firebaseTrapWords.delete(w);
     });
-    if(changed){
-      saveSet(TRAP_KEY, localTrapWords);
-    }
+    if(changed) saveSet(TRAP_KEY, localTrapWords);
   }
 
-  // Gộp theo âm cuối: "tài phiệt", "thế phiệt" → "phiệt"
-  // Kết hợp từ bẫy hiện có + localTrapEndings (âm đã đánh dấu, kể cả khi chưa có từ)
   function getTrapEndings(){
     var endingSet = new Set();
     function addEnding(w){
@@ -1117,15 +1183,16 @@
     endings.forEach(function(syll){
       var wordsWithEnding = wordsEndingWith(syll);
       var count = wordsWithEnding.length;
+      var auto = isAutoTrapEnding(syll);
       var chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'suggest-chip trap-marked';
-      chip.title = 'Bấm để bỏ đánh dấu bẫy cho tất cả từ có âm cuối "' + syll + '" (' + count + ' từ)';
+      chip.title = (auto ? '[Tự động] ' : '') + 'Bấm để bỏ đánh dấu bẫy cho âm cuối "' + syll + '" (' + count + ' từ)';
       var star = document.createElement('span');
       star.className = 'star-mark';
       star.textContent = '★';
       chip.appendChild(star);
-      chip.appendChild(document.createTextNode(syll + (count > 1 ? ' (' + count + ')' : '')));
+      chip.appendChild(document.createTextNode(syll + (count > 1 ? ' (' + count + ')' : '') + (auto ? ' ⚡' : '')));
       chip.addEventListener('click', function(){
         if(!confirm('Bỏ đánh dấu bẫy cho âm cuối "' + syll + '" (' + count + ' từ) trên Firebase?')) return;
         wordsWithEnding.forEach(function(w){
@@ -1293,19 +1360,18 @@
   }
 
   // Thêm từ vào local + Firebase
-  // Nếu âm cuối đã là bẫy → tự đánh dấu bẫy cho từ mới
+  // Nếu âm cuối đã là bẫy (thủ công hoặc tự động) → tự đánh dấu bẫy
   function addWordToDictionary(w){
     w = norm(w);
     customWords.add(w);
     removedWords.delete(w);
     saveSet(CUSTOM_KEY, customWords);
     saveSet(REMOVED_KEY, removedWords);
-    // Cập nhật local ngay
     if(ALL_WORDS.indexOf(w) === -1) ALL_WORDS.push(w);
     rebuildIndices();
 
     var ending = lastSyllable(w);
-    var shouldTrap = isTrapWord(w) || isTrapEnding(ending);
+    var shouldTrap = isTrapWord(w) || isTrapEnding(ending) || isAutoTrapEnding(ending);
     if(shouldTrap){
       localTrapWords.add(w);
       firebaseTrapWords.add(w);
@@ -1315,7 +1381,6 @@
     }
 
     refreshCurrentSuggestions();
-    // Ghi Firebase (kèm cờ trap nếu âm cuối đã là bẫy)
     return firebasePutWord(w, shouldTrap)
       .then(function(){
         var msg = '✅ Đã thêm "' + w + '" lên Firebase.';
@@ -1406,7 +1471,7 @@
     });
   }
 
-  // Sao chép tất cả âm cuối đã đặt bẫy (mỗi âm một dòng)
+  // Sao chép tất cả âm cuối đã đặt bẫy
   var trapCopyEndingsBtn = document.getElementById('trapCopyEndingsBtn');
   if(trapCopyEndingsBtn){
     trapCopyEndingsBtn.addEventListener('click', function(){
@@ -1429,8 +1494,37 @@
     });
   }
 
-  // Tải từ bẫy cũ (localStorage) lên Firebase
-  // Chỉ tải các từ còn tồn tại trong kho từ — bỏ qua từ đã bị xóa
+  // Tự đánh dấu bẫy: âm cuối mà mọi từ bắt đầu bằng âm đó đều cụt / không nên dùng
+  var trapAutoDetectBtn = document.getElementById('trapAutoDetectBtn');
+  if(trapAutoDetectBtn){
+    trapAutoDetectBtn.addEventListener('click', function(){
+      if(!isDictReady){
+        showTrapMsg('⏳ Đang tải kho từ, vui lòng đợi...', 'err');
+        return;
+      }
+      var found = findAutoTrapEndings();
+      // Chỉ lấy những âm chưa có trong danh sách bẫy
+      var already = new Set(getTrapEndings());
+      var newOnes = found.filter(function(s){ return !already.has(s); });
+      if(found.length === 0){
+        showTrapMsg('⚠️ Không tìm thấy âm cuối nào thỏa điều kiện (sau âm đó toàn từ cụt / không nên dùng).', 'err');
+        return;
+      }
+      if(newOnes.length === 0){
+        showTrapMsg('✅ Đã có đủ ' + found.length + ' âm bẫy tự động: ' + found.join(', '), 'ok');
+        return;
+      }
+      var preview = newOnes.slice(0, 15).join(', ') + (newOnes.length > 15 ? '…' : '');
+      if(!confirm('Tìm thấy ' + newOnes.length + ' âm cuối mới để đánh dấu bẫy:\n' + preview + '\n\nĐánh dấu tất cả lên Firebase?')) return;
+      showTrapMsg('⏳ Đang đánh dấu ' + newOnes.length + ' âm bẫy tự động...', 'ok');
+      markTrapEndings(newOnes, null, function(wordCount, endingCount){
+        renderTrapWords();
+        showTrapMsg('⭐ Đã tự đánh dấu ' + endingCount + ' âm bẫy (' + wordCount + ' từ), vd: ' + newOnes.slice(0, 8).join(', ') + (newOnes.length > 8 ? '…' : ''), 'ok');
+      });
+    });
+  }
+
+  // Tải từ bẫy cũ (localStorage) lên Firebase — chỉ từ còn trong kho
   var uploadLocalTrapsBtn = document.getElementById('uploadLocalTrapsBtn');
   if(uploadLocalTrapsBtn){
     uploadLocalTrapsBtn.addEventListener('click', function(){
@@ -1501,7 +1595,6 @@
         }
         rebuildIndices();
         pruneTrapWords();
-        // Đồng bộ localTrapEndings từ các từ bẫy trên Firebase (âm cuối của từ trap)
         firebaseTrapWords.forEach(function(w){
           var parts = w.split(' ');
           if(parts.length >= 2) localTrapEndings.add(parts[parts.length - 1]);
