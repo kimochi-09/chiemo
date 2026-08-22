@@ -623,8 +623,6 @@
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
       <span style="display:flex; gap:6px; flex-wrap:wrap;">
-        <button type="button" class="small-btn" id="trapApplyPresetBtn" style="padding:5px 12px; font-size:12px;" title="Xóa hết bẫy cũ và đặt lại theo danh sách cố định">⭐ Đặt lại danh sách bẫy</button>
-        <button type="button" class="small-btn" id="trapClearAllBtn" style="padding:5px 12px; font-size:12px;" title="Xóa toàn bộ đánh dấu bẫy">🗑️ Xóa hết bẫy</button>
         <button type="button" class="small-btn" id="trapCopyEndingsBtn" style="padding:5px 12px; font-size:12px;" title="Sao chép tất cả âm cuối đã đặt bẫy">📋 Sao chép âm cuối</button>
         <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
       </span>
@@ -969,23 +967,6 @@
   var TRAP_KEY = 'noitu_trap_words_v1';
   var TRAP_ENDINGS_KEY = 'noitu_trap_endings_v1';
 
-  // Danh sách âm cuối bẫy cố định (đặt lại bằng nút "Đặt lại danh sách bẫy")
-  var TRAP_ENDINGS_PRESET = [
-    'bạnh','bảy','bếp','bịp','cặn','cậu','chạc','chài','chét','chích','chùa','cối','cơn','cút',
-    'dạt','díp','dịp','dõi','dốt','dưng','đác','đạt','đắn','điểu','đó','độn','giẻ',
-    'hái','hãn','hèm','hiên','hò','hoạn','huống','kép','kẹp','két','kha','khanh','kheo','khế','khỉ','khỏi','khuẩn','kiếp',
-    'lặt','lẽo','lệch','liễm','liễu','lóc','lỗi','lốt','lủi','lưng','lựu','lỵ',
-    'mác','mào','mảy','mắn','mẽ','mề','mi','miêu','mõm','mòn','mồm','mốt','muỗi','mút','mượt',
-    'nạ','nái','nang','nạp','náu','nay','nẻo','nệ','nết','ngạch','ngạn','ngoằng','ngừa',
-    'nhánh','nhện','nhi','nhợt','nhừ','nọ','nồm',
-    'phả','phào','phất','phiệt','quẩn','rê','rể',
-    'sả','sách','sải','sẻ','sen','sét','soái','sủa','suối','súy','sữa',
-    'tạng','tằm','tẻ','tể','thán','thặng','thệ','thềm','thiêng','thiếp','thoa','thoại','toan',
-    'trá','trạch','trệ','trịch','trỏ','uế','ủi',
-    'vạc','vách','vặn','vẩy','vế','việc','vụn','vữa','vựng',
-    'xạ','xát','xắn','xiêm','xuyến','xưởng'
-  ];
-
   function loadSet(key){
     try{
       var raw = localStorage.getItem(key);
@@ -1076,33 +1057,6 @@
         .then(function(){ i += 20; nextBatch(); })
         .catch(function(err){
           showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
-        });
-    }
-    nextBatch();
-  }
-
-  // Xóa toàn bộ bẫy (local + Firebase)
-  function clearAllTraps(onDone){
-    var allWords = Array.from(new Set(
-      Array.from(localTrapWords).concat(Array.from(firebaseTrapWords))
-    )).filter(function(w){ return !!w; });
-    localTrapWords = new Set();
-    firebaseTrapWords = new Set();
-    localTrapEndings = new Set();
-    saveSet(TRAP_KEY, localTrapWords);
-    saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
-    refreshCurrentSuggestions();
-    var i = 0;
-    function nextBatch(){
-      var batch = allWords.slice(i, i + 20);
-      if(!batch.length){
-        if(onDone) onDone(allWords.length);
-        return;
-      }
-      Promise.all(batch.map(function(w){ return firebaseSetTrap(w, false); }))
-        .then(function(){ i += 20; nextBatch(); })
-        .catch(function(err){
-          showTrapMsg('⚠️ Một số từ lỗi khi xóa Firebase: ' + (err.message || err), 'err');
         });
     }
     nextBatch();
@@ -1546,49 +1500,6 @@
       } else {
         showTrapMsg('⚠️ Trình duyệt không hỗ trợ sao chép tự động.', 'err');
       }
-    });
-  }
-
-  // Xóa toàn bộ bẫy
-  var trapClearAllBtn = document.getElementById('trapClearAllBtn');
-  if(trapClearAllBtn){
-    trapClearAllBtn.addEventListener('click', function(){
-      if(!isDictReady){
-        showTrapMsg('⏳ Đang tải kho từ, vui lòng đợi...', 'err');
-        return;
-      }
-      var n = getTrapEndings().length;
-      if(!n && !localTrapWords.size && !firebaseTrapWords.size){
-        showTrapMsg('⚠️ Hiện không có bẫy nào để xóa.', 'err');
-        return;
-      }
-      if(!confirm('Xóa toàn bộ ' + n + ' âm bẫy (local + Firebase)?')) return;
-      showTrapMsg('⏳ Đang xóa toàn bộ bẫy...', 'ok');
-      clearAllTraps(function(wordCount){
-        renderTrapWords();
-        showTrapMsg('🗑️ Đã xóa hết bẫy (' + wordCount + ' từ trên Firebase).', 'ok');
-      });
-    });
-  }
-
-  // Đặt lại bẫy theo danh sách cố định: xóa hết rồi đánh dấu TRAP_ENDINGS_PRESET
-  var trapApplyPresetBtn = document.getElementById('trapApplyPresetBtn');
-  if(trapApplyPresetBtn){
-    trapApplyPresetBtn.addEventListener('click', function(){
-      if(!isDictReady){
-        showTrapMsg('⏳ Đang tải kho từ, vui lòng đợi...', 'err');
-        return;
-      }
-      var preset = TRAP_ENDINGS_PRESET.slice();
-      if(!confirm('Xóa toàn bộ bẫy hiện tại và đặt lại ' + preset.length + ' âm cuối theo danh sách cố định?\n\n' + preset.slice(0, 20).join(', ') + '…')) return;
-      showTrapMsg('⏳ Đang xóa bẫy cũ...', 'ok');
-      clearAllTraps(function(){
-        showTrapMsg('⏳ Đang đánh dấu ' + preset.length + ' âm bẫy mới...', 'ok');
-        markTrapEndings(preset, null, function(wordCount, endingCount){
-          renderTrapWords();
-          showTrapMsg('⭐ Đã đặt lại ' + endingCount + ' âm bẫy (' + wordCount + ' từ) theo danh sách cố định.', 'ok');
-        });
-      });
     });
   }
 
