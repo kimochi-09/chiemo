@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nối Từ </title>
+<title>Nối Từ Tiếng Việt</title>
 <style>
   :root{
     --bg1:#0f1226;
@@ -277,13 +277,13 @@
     color:#ffb700;
   }
   .suggest-chip.trap-setup{
-    background:rgba(255,224,90,.1);
-    border-color:rgba(255,224,90,.55);
-    color:#ffe05a;
+    background:rgba(255,105,180,.12);
+    border-color:rgba(255,105,180,.55);
+    color:#ff69b4;
   }
   .suggest-chip.trap-setup:hover{
-    border-color:#ffe05a;
-    color:#ffe05a;
+    border-color:#ff69b4;
+    color:#ff69b4;
   }
   .suggest-chip .x-mark{
     font-weight:800;
@@ -582,7 +582,7 @@
     <p class="section-title">💡 Từ có thể nối tiếp</p>
     <p class="empty-hint" style="margin-top:-8px;margin-bottom:10px;">
       Từ có dấu <strong style="color:#ffb700;">✗</strong> là từ <em>không nên dùng</em>: đối thủ có thể chọn ngay một từ nối khiến bạn hết đường đi tiếp.<br>
-      Từ có dấu <strong style="color:#ffe05a;">⚡</strong> là từ <em>nên cân nhắc dùng</em>: dùng từ này có thể dồn đối thủ vào một từ mà bạn đã đánh dấu là "bẫy" (★).
+      Từ có dấu <strong style="color:#ff69b4;">⚡</strong> (cùng nhóm không nên dùng): dùng từ này có thể dồn đối thủ vào một từ bẫy (★), nhưng vẫn rủi ro.
     </p>
     <div id="suggestList" class="suggest-list">
       <span class="empty-hint">Nhập một từ ở trên để xem gợi ý.</span>
@@ -623,7 +623,7 @@
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
       <span style="display:flex; gap:6px; flex-wrap:wrap;">
-        <button type="button" class="small-btn" id="trapAutoDetectBtn" style="padding:5px 12px; font-size:12px;" title="Tự tìm âm bẫy + từ dồn bẫy chắc (phía sau chỉ còn ★, vd. hái lượm)">⚡ Tự đánh dấu bẫy</button>
+        <button type="button" class="small-btn" id="trapAutoDetectBtn" style="padding:5px 12px; font-size:12px;" title="Tự ★ các từ/âm mà phía sau chỉ còn nhóm không nên dùng (chip cam ✗ hoặc hồng ⚡)">⚡ Tự đánh dấu bẫy</button>
         <button type="button" class="small-btn" id="trapCopyEndingsBtn" style="padding:5px 12px; font-size:12px;" title="Sao chép tất cả âm cuối đã đặt bẫy">📋 Sao chép âm cuối</button>
         <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
       </span>
@@ -779,7 +779,7 @@
       setupMark.className = 'setup-mark';
       setupMark.textContent = '⚡';
       chip.appendChild(setupMark);
-      chip.title = 'Nên cân nhắc: dùng từ này có thể dồn đối thủ về phía một từ bẫy (★).';
+      chip.title = 'Không nên dùng (⚡ dồn bẫy): có thể dồn đối thủ về ★ nhưng vẫn rủi ro.';
     } else {
       chip.className = 'suggest-chip continues';
       chip.title = 'Gợi ý thường';
@@ -853,12 +853,29 @@
       }
     });
 
-    // Thứ tự: Bẫy → Cụt → Thường → Có thể dồn bẫy → Không nên dùng
+    // Thứ tự: Bẫy → Cụt → Thường → Không nên dùng (gồm cả ⚡ dồn bẫy, màu hồng)
     appendSection(suggestList, '★ Nên dùng (bẫy)', '#ffd54a', traps, 'trap');
     appendSection(suggestList, '✗ Cụt — hết đường', '#ff5c7a', deads, 'dead');
     appendSection(suggestList, 'Gợi ý thường', '#37e0a4', oks, 'ok');
-    appendSection(suggestList, '⚡ Có thể dồn bẫy', '#ffe05a', setups, 'setup');
-    appendSection(suggestList, '✗ Không nên dùng', '#ffb700', risks, 'risk');
+    // Gộp "không nên dùng" + "dồn bẫy" thành một nhóm
+    if(risks.length || setups.length){
+      var avoidSection = document.createElement('div');
+      avoidSection.className = 'sugg-section';
+      var avoidTitle = document.createElement('div');
+      avoidTitle.className = 'sugg-section-title';
+      avoidTitle.style.color = '#ffb700';
+      var avoidCount = risks.length + setups.length;
+      avoidTitle.innerHTML = '<span class="dot" style="background:#ffb700;"></span>' +
+        '✗ Không nên dùng <span style="font-weight:500;opacity:.7;">(' + avoidCount + ')</span>';
+      avoidSection.appendChild(avoidTitle);
+      var avoidChips = document.createElement('div');
+      avoidChips.className = 'sugg-section-chips';
+      // ⚡ dồn bẫy (hồng) trước, rồi ✗ risk (cam)
+      setups.forEach(function(w){ avoidChips.appendChild(createSuggestChip(w, 'setup')); });
+      risks.forEach(function(w){ avoidChips.appendChild(createSuggestChip(w, 'risk')); });
+      avoidSection.appendChild(avoidChips);
+      suggestList.appendChild(avoidSection);
+    }
   }
 
   function copyToClipboard(text, chipEl){
@@ -1000,56 +1017,58 @@
     return opts.some(function(opt){ return isDeadEndAfter(opt); });
   }
 
-  // Từ láy 2 âm giống nhau (vd: "cheng cheng"): đối thủ chơi xong thì
-  // âm kế tiếp lại là chính âm đó; nếu hết từ khác → mình bị cụt, mình thua.
+  // Từ láy 2 âm giống nhau (vd: "cheng cheng")
   function isReduplicatedWord(w){
     var parts = norm(w).split(' ');
     return parts.length === 2 && parts[0] === parts[1];
   }
 
-  // Âm tiết S là "bẫy tự động" chỉ khi:
-  // 1) Không còn nước CỤT nào bắt đầu bằng S (kẻo đối thủ chơi cụt / láy
-  //    như "cheng cheng" là mình thua ngay)
-  // 2) Không có từ láy X X bắt đầu bằng S
-  // 3) Mọi từ bắt đầu bằng S đều là "không nên dùng" (risky) —
-  //    đối thủ buộc phải chơi nước xấu → mình thắng
-  // Ví dụ đạt: sau "lặt" toàn từ risky, không có cụt / láy.
+  function canSetupTrapAfter(word){
+    var opts = continuationsAfter(word);
+    if(opts.length === 0) return false;
+    return opts.some(function(opt){ return isTrapWord(opt); });
+  }
+
+  // Cùng nhóm UI "✗ Không nên dùng": chip cam (risk) hoặc chip hồng (⚡ setup)
+  function isInAvoidGroup(w){
+    if(isTrapWord(w)) return false;       // ★ không thuộc nhóm này
+    if(isDeadEndAfter(w)) return false;   // cụt là nhóm riêng
+    if(isRiskyAfter(w)) return true;      // chip cam
+    if(canSetupTrapAfter(w)) return true; // chip hồng ⚡
+    return false; // gợi ý thường
+  }
+
+  // Từ W tự ★ nếu phía sau W chỉ toàn từ trong nhóm không nên dùng
+  // (cam và/hoặc hồng — không có cụt, không có gợi ý thường, không có ★)
+  function forcesOnlyAvoid(word){
+    var opts = continuationsAfter(word);
+    if(opts.length === 0) return false;
+    return opts.every(isInAvoidGroup);
+  }
+
+  // Âm S: mọi từ bắt đầu bằng S đều thuộc nhóm không nên dùng
+  // (và không có cụt / láy) → đánh dấu cả cụm âm cuối S
   function isAutoTrapEnding(syllable){
     var words = byFirstSyllable.get(syllable) || [];
     if(words.length === 0) return false;
-    // Có nước cụt → đối thủ chơi cụt là mình thua → không phải bẫy
-    if(words.some(function(w){ return isDeadEndAfter(w); })) return false;
-    // Có từ láy (cheng cheng, ...) → đối thủ có thể dùng để dồn mình
-    if(words.some(function(w){ return isReduplicatedWord(w); })) return false;
-    // Mọi nước đi đều "không nên dùng"
-    return words.every(function(w){ return isRiskyAfter(w); });
+    if(words.some(function(w){ return isDeadEndAfter(w) || isReduplicatedWord(w); })) return false;
+    return words.every(isInAvoidGroup);
   }
 
-  // Từ W "dồn bẫy chắc" nếu sau khi mình dùng W, mọi nước nối tiếp của
-  // đối thủ đều đã là từ bẫy (★). Ví dụ: "hái lượm" → đối thủ chỉ còn ★.
-  function forcesOnlyTraps(word){
-    var opts = continuationsAfter(word);
-    if(opts.length === 0) return false;
-    return opts.every(function(opt){ return isTrapWord(opt); });
-  }
-
-  // Tìm tất cả âm tiết thỏa điều kiện bẫy tự động
   function findAutoTrapEndings(){
     var endings = [];
     byFirstSyllable.forEach(function(words, syll){
-      if(words.length > 0 && isAutoTrapEnding(syll)){
-        endings.push(syll);
-      }
+      if(words.length > 0 && isAutoTrapEnding(syll)) endings.push(syll);
     });
     return endings.sort(function(a, b){ return a.localeCompare(b, 'vi'); });
   }
 
-  // Tìm các từ đơn lẻ cần tự ★: phía sau chỉ còn toàn từ bẫy
+  // Từ đơn lẻ cần tự ★: phía sau chỉ còn cam / hồng
   function findForceTrapWords(){
     var out = [];
     WORD_SET.forEach(function(w){
-      if(isTrapWord(w)) return; // đã là bẫy rồi
-      if(forcesOnlyTraps(w)) out.push(w);
+      if(isTrapWord(w)) return;
+      if(forcesOnlyAvoid(w)) out.push(w);
     });
     return out.sort(function(a, b){ return a.localeCompare(b, 'vi'); });
   }
@@ -1619,7 +1638,7 @@
       var toClean = staleAuto.length > 0 ? staleAuto : stale;
 
       var newOnes = found.filter(function(s){ return already.indexOf(s) === -1; });
-      // Từ "dồn bẫy chắc": phía sau chỉ còn toàn ★ (vd. hái lượm)
+      // Từ phía sau chỉ còn nhóm không nên dùng (cam ✗ / hồng ⚡)
       var forceWords = findForceTrapWords();
 
       if(toClean.length === 0 && newOnes.length === 0 && forceWords.length === 0){
@@ -1639,7 +1658,7 @@
         lines.push('⭐ Thêm ' + newOnes.length + ' âm bẫy mới:\n' + newOnes.slice(0, 20).join(', ') + (newOnes.length > 20 ? '…' : ''));
       }
       if(forceWords.length){
-        lines.push('⚡ Đánh dấu ' + forceWords.length + ' từ dồn bẫy chắc (phía sau chỉ còn ★):\n' + forceWords.slice(0, 15).join(', ') + (forceWords.length > 15 ? '…' : ''));
+        lines.push('⚡ Đánh dấu ' + forceWords.length + ' từ (phía sau chỉ còn ✗/⚡ không nên dùng):\n' + forceWords.slice(0, 15).join(', ') + (forceWords.length > 15 ? '…' : ''));
       }
       if(!confirm(lines.join('\n\n') + '\n\nÁp dụng lên Firebase?')) return;
 
@@ -1660,7 +1679,7 @@
             var parts = [];
             if(toClean.length) parts.push('đã bỏ ' + toClean.length + ' âm sai');
             if(endingMsg) parts.push(endingMsg);
-            if(forceCount) parts.push('đã ★ ' + forceCount + ' từ dồn bẫy chắc');
+            if(forceCount) parts.push('đã ★ ' + forceCount + ' từ (sau chỉ còn ✗/⚡)');
             if(!parts.length) parts.push('không có thay đổi');
             showTrapMsg('⭐ ' + parts.join('; ') + '.', 'ok');
           });
