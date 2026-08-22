@@ -622,7 +622,10 @@
     </div>
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
-      <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
+      <span style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="small-btn" id="trapCopyEndingsBtn" style="padding:5px 12px; font-size:12px;" title="Sao chép tất cả âm cuối đã đặt bẫy">📋 Sao chép âm cuối</button>
+        <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
+      </span>
     </div>
     <div id="trapWordsList" class="suggest-list trap-list-collapsed"></div>
   </div>
@@ -1059,8 +1062,8 @@
   var trapWordsList = document.getElementById('trapWordsList');
   var trapWordsCount = document.getElementById('trapWordsCount');
 
-  function renderTrapWords(){
-    // Gộp theo âm cuối: "tài phiệt", "thế phiệt" → chỉ hiện "phiệt"
+  // Gộp theo âm cuối: "tài phiệt", "thế phiệt" → chỉ trả về "phiệt"
+  function getTrapEndings(){
     var endingSet = new Set();
     function addEnding(w){
       if(!WORD_SET.has(w)) return;
@@ -1069,7 +1072,11 @@
     }
     localTrapWords.forEach(addEnding);
     firebaseTrapWords.forEach(addEnding);
-    var endings = Array.from(endingSet).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+    return Array.from(endingSet).sort(function(a, b){ return a.localeCompare(b, 'vi'); });
+  }
+
+  function renderTrapWords(){
+    var endings = getTrapEndings();
     trapWordsCount.textContent = endings.length;
     trapWordsList.innerHTML = '';
     if(endings.length === 0){
@@ -1348,6 +1355,29 @@
       } else {
         trapWordsList.classList.remove('trap-list-collapsed');
         trapCollapseBtn.textContent = 'Thu gọn';
+      }
+    });
+  }
+
+  // Sao chép tất cả âm cuối đã đặt bẫy (mỗi âm một dòng)
+  var trapCopyEndingsBtn = document.getElementById('trapCopyEndingsBtn');
+  if(trapCopyEndingsBtn){
+    trapCopyEndingsBtn.addEventListener('click', function(){
+      var endings = getTrapEndings();
+      if(endings.length === 0){
+        showTrapMsg('⚠️ Chưa có âm cuối nào được đặt bẫy để sao chép.', 'err');
+        return;
+      }
+      var text = endings.join('\n');
+      function done(){
+        showTrapMsg('✅ Đã sao chép ' + endings.length + ' âm cuối vào clipboard.', 'ok');
+      }
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done).catch(function(){
+          showTrapMsg('⚠️ Không sao chép được. Hãy thử lại hoặc kiểm tra quyền clipboard.', 'err');
+        });
+      } else {
+        showTrapMsg('⚠️ Trình duyệt không hỗ trợ sao chép tự động.', 'err');
       }
     });
   }
