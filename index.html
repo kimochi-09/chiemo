@@ -950,6 +950,7 @@
   var REMOVED_KEY = 'noitu_removed_words_v1';
   var TRAP_KEY = 'noitu_trap_words_v1';
   var TRAP_ENDINGS_KEY = 'noitu_trap_endings_v1';
+  var AUTO_TRAP_ENDINGS_KEY = 'noitu_auto_trap_endings_v1';
 
   function loadSet(key){
     try{
@@ -966,6 +967,8 @@
   var localTrapWords = loadSet(TRAP_KEY);
   // Âm cuối đã đánh dấu bẫy (để từ mới cùng âm cuối tự nhận bẫy)
   var localTrapEndings = loadSet(TRAP_ENDINGS_KEY);
+  // Âm cuối do máy tự đánh dấu (để dọn khi rule đổi / đánh dấu nhầm)
+  var autoMarkedEndings = loadSet(AUTO_TRAP_ENDINGS_KEY);
 
   // Trap = Firebase trap OR local trap mark
   function isTrapWord(w){
@@ -1034,10 +1037,12 @@
   }
 
   // Đánh dấu bẫy hàng loạt theo danh sách âm cuối (local + Firebase)
-  function markTrapEndings(endings, onProgress, onDone){
+  // fromAuto = true → ghi nhận vào autoMarkedEndings để sau này dọn được
+  function markTrapEndings(endings, onProgress, onDone, fromAuto){
     var allWords = [];
     endings.forEach(function(syll){
       localTrapEndings.add(syll);
+      if(fromAuto) autoMarkedEndings.add(syll);
       (byLastSyllable.get(syll) || []).forEach(function(w){
         localTrapWords.add(w);
         firebaseTrapWords.add(w);
@@ -1046,8 +1051,8 @@
     });
     saveSet(TRAP_KEY, localTrapWords);
     saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
+    if(fromAuto) saveSet(AUTO_TRAP_ENDINGS_KEY, autoMarkedEndings);
     refreshCurrentSuggestions();
-    // Ghi Firebase theo batch
     var unique = Array.from(new Set(allWords));
     var i = 0;
     function nextBatch(){
@@ -1058,6 +1063,39 @@
       }
       if(onProgress) onProgress(i, unique.length);
       Promise.all(batch.map(function(w){ return firebaseSetTrap(w, true); }))
+        .then(function(){ i += 20; nextBatch(); })
+        .catch(function(err){
+          showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
+        });
+    }
+    nextBatch();
+  }
+
+  // Bỏ đánh dấu bẫy hàng loạt theo danh sách âm cuối
+  function unmarkTrapEndings(endings, onDone){
+    var allWords = [];
+    endings.forEach(function(syll){
+      localTrapEndings.delete(syll);
+      autoMarkedEndings.delete(syll);
+      (byLastSyllable.get(syll) || []).forEach(function(w){
+        localTrapWords.delete(w);
+        firebaseTrapWords.delete(w);
+        allWords.push(w);
+      });
+    });
+    saveSet(TRAP_KEY, localTrapWords);
+    saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
+    saveSet(AUTO_TRAP_ENDINGS_KEY, autoMarkedEndings);
+    refreshCurrentSuggestions();
+    var unique = Array.from(new Set(allWords));
+    var i = 0;
+    function nextBatch(){
+      var batch = unique.slice(i, i + 20);
+      if(!batch.length){
+        if(onDone) onDone(unique.length, endings.length);
+        return;
+      }
+      Promise.all(batch.map(function(w){ return firebaseSetTrap(w, false); }))
         .then(function(){ i += 20; nextBatch(); })
         .catch(function(err){
           showTrapMsg('⚠️ Một số từ lỗi khi ghi Firebase: ' + (err.message || err), 'err');
@@ -1129,8 +1167,10 @@
       firebaseTrapWords.delete(w);
     });
     localTrapEndings.delete(syllable);
+    autoMarkedEndings.delete(syllable);
     saveSet(TRAP_KEY, localTrapWords);
     saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
+    saveSet(AUTO_TRAP_ENDINGS_KEY, autoMarkedEndings);
     refreshCurrentSuggestions();
     showTrapMsg('⏳ Đang bỏ bẫy "' + syllable + '" trên Firebase...', 'ok');
     var i = 0;
@@ -1214,8 +1254,10 @@
           firebaseTrapWords.delete(w);
         });
         localTrapEndings.delete(syll);
+        autoMarkedEndings.delete(syll);
         saveSet(TRAP_KEY, localTrapWords);
         saveSet(TRAP_ENDINGS_KEY, localTrapEndings);
+        saveSet(AUTO_TRAP_ENDINGS_KEY, autoMarkedEndings);
         refreshCurrentSuggestions();
         renderTrapWords();
         var i = 0;
@@ -1508,8 +1550,7 @@
     });
   }
 
-  // Tự đánh dấu bẫy: âm cuối mà mọi nước đi đều "không nên dùng",
-  // không có nước cụt và không có từ láy (vd. cheng cheng)
+  // Tự đánh dấu bẫy + dọn các âm đã đánh dấu nhầm (không còn thỏa rule mới)
   var trapAutoDetectBtn = document.getElementById('trapAutoDetectBtn');
   if(trapAutoDetectBtn){
     trapAutoDetectBtn.addEventListener('click', function(){
@@ -1518,24 +1559,61 @@
         return;
       }
       var found = findAutoTrapEndings();
-      // Chỉ lấy những âm chưa có trong danh sách bẫy
-      var already = new Set(getTrapEndings());
-      var newOnes = found.filter(function(s){ return !already.has(s); });
-      if(found.length === 0){
-        showTrapMsg('⚠️ Không tìm thấy âm bẫy tự động (cần: mọi nước đều "không nên dùng", không có cụt / từ láy).', 'err');
+      var foundSet = new Set(found);
+      var already = getTrapEndings();
+
+      // Âm đang đánh dấu nhưng KHÔNG thỏa rule mới → ứng viên cần dọn
+      // Ưu tiên những âm từng do máy đánh dấu; nếu chưa theo dõi được
+      // (lần auto cũ) thì liệt kê mọi âm đang mark mà không còn hợp lệ.
+      var stale = already.filter(function(s){ return !foundSet.has(s); });
+      var staleAuto = stale.filter(function(s){ return autoMarkedEndings.has(s); });
+      // Lần auto cũ chưa ghi autoMarkedEndings → cho phép dọn toàn bộ stale
+      var toClean = staleAuto.length > 0 ? staleAuto : stale;
+
+      var newOnes = found.filter(function(s){ return already.indexOf(s) === -1; });
+
+      if(toClean.length === 0 && newOnes.length === 0){
+        if(found.length === 0){
+          showTrapMsg('⚠️ Không có âm bẫy tự động hợp lệ, cũng không có gì cần dọn.', 'err');
+        } else {
+          showTrapMsg('✅ Danh sách bẫy đã khớp rule mới (' + found.length + ' âm).', 'ok');
+        }
         return;
       }
-      if(newOnes.length === 0){
-        showTrapMsg('✅ Đã có đủ ' + found.length + ' âm bẫy tự động: ' + found.join(', '), 'ok');
-        return;
+
+      var lines = [];
+      if(toClean.length){
+        lines.push('🗑️ Bỏ ' + toClean.length + ' âm không còn hợp lệ:\n' + toClean.slice(0, 20).join(', ') + (toClean.length > 20 ? '…' : ''));
       }
-      var preview = newOnes.slice(0, 15).join(', ') + (newOnes.length > 15 ? '…' : '');
-      if(!confirm('Tìm thấy ' + newOnes.length + ' âm cuối mới để đánh dấu bẫy:\n' + preview + '\n\nĐánh dấu tất cả lên Firebase?')) return;
-      showTrapMsg('⏳ Đang đánh dấu ' + newOnes.length + ' âm bẫy tự động...', 'ok');
-      markTrapEndings(newOnes, null, function(wordCount, endingCount){
-        renderTrapWords();
-        showTrapMsg('⭐ Đã tự đánh dấu ' + endingCount + ' âm bẫy (' + wordCount + ' từ), vd: ' + newOnes.slice(0, 8).join(', ') + (newOnes.length > 8 ? '…' : ''), 'ok');
-      });
+      if(newOnes.length){
+        lines.push('⭐ Thêm ' + newOnes.length + ' âm bẫy mới:\n' + newOnes.slice(0, 20).join(', ') + (newOnes.length > 20 ? '…' : ''));
+      }
+      if(!confirm(lines.join('\n\n') + '\n\nÁp dụng lên Firebase?')) return;
+
+      function doMark(){
+        if(newOnes.length === 0){
+          renderTrapWords();
+          showTrapMsg('✅ Đã dọn ' + toClean.length + ' âm bẫy sai' + (newOnes.length ? '' : '') + '.', 'ok');
+          return;
+        }
+        showTrapMsg('⏳ Đang đánh dấu ' + newOnes.length + ' âm bẫy mới...', 'ok');
+        markTrapEndings(newOnes, null, function(wordCount, endingCount){
+          renderTrapWords();
+          var parts = [];
+          if(toClean.length) parts.push('đã bỏ ' + toClean.length + ' âm sai');
+          parts.push('đã thêm ' + endingCount + ' âm bẫy (' + wordCount + ' từ)');
+          showTrapMsg('⭐ ' + parts.join('; ') + '.', 'ok');
+        }, true);
+      }
+
+      if(toClean.length){
+        showTrapMsg('⏳ Đang bỏ ' + toClean.length + ' âm bẫy không hợp lệ...', 'ok');
+        unmarkTrapEndings(toClean, function(){
+          doMark();
+        });
+      } else {
+        doMark();
+      }
     });
   }
 
