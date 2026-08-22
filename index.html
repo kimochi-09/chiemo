@@ -623,7 +623,7 @@
     <div class="trap-label" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Âm cuối đã đặt bẫy (<span id="trapWordsCount">0</span>)</span>
       <span style="display:flex; gap:6px; flex-wrap:wrap;">
-        <button type="button" class="small-btn" id="trapAutoDetectBtn" style="padding:5px 12px; font-size:12px;" title="Tự tìm âm cuối mà đối thủ nối tiếp đều thua">⚡ Tự đánh dấu bẫy</button>
+        <button type="button" class="small-btn" id="trapAutoDetectBtn" style="padding:5px 12px; font-size:12px;" title="Tự tìm âm cuối: mọi nước đi đều 'không nên dùng', không có nước cụt / từ láy">⚡ Tự đánh dấu bẫy</button>
         <button type="button" class="small-btn" id="trapCopyEndingsBtn" style="padding:5px 12px; font-size:12px;" title="Sao chép tất cả âm cuối đã đặt bẫy">📋 Sao chép âm cuối</button>
         <button type="button" class="small-btn" id="trapCollapseBtn" style="padding:5px 12px; font-size:12px;">Mở rộng</button>
       </span>
@@ -997,15 +997,29 @@
     return opts.some(function(opt){ return isDeadEndAfter(opt); });
   }
 
-  // Âm tiết S là "bẫy tự động" nếu mọi từ BẮT ĐẦU bằng S
-  // đều là từ cụt (hết đường) hoặc "không nên dùng" (đối thủ chơi là thua).
-  // Ví dụ: sau "lặt" toàn từ xấu → dồn đối thủ về "lặt" là thắng.
+  // Từ láy 2 âm giống nhau (vd: "cheng cheng"): đối thủ chơi xong thì
+  // âm kế tiếp lại là chính âm đó; nếu hết từ khác → mình bị cụt, mình thua.
+  function isReduplicatedWord(w){
+    var parts = norm(w).split(' ');
+    return parts.length === 2 && parts[0] === parts[1];
+  }
+
+  // Âm tiết S là "bẫy tự động" chỉ khi:
+  // 1) Không còn nước CỤT nào bắt đầu bằng S (kẻo đối thủ chơi cụt / láy
+  //    như "cheng cheng" là mình thua ngay)
+  // 2) Không có từ láy X X bắt đầu bằng S
+  // 3) Mọi từ bắt đầu bằng S đều là "không nên dùng" (risky) —
+  //    đối thủ buộc phải chơi nước xấu → mình thắng
+  // Ví dụ đạt: sau "lặt" toàn từ risky, không có cụt / láy.
   function isAutoTrapEnding(syllable){
     var words = byFirstSyllable.get(syllable) || [];
     if(words.length === 0) return false;
-    return words.every(function(w){
-      return isDeadEndAfter(w) || isRiskyAfter(w);
-    });
+    // Có nước cụt → đối thủ chơi cụt là mình thua → không phải bẫy
+    if(words.some(function(w){ return isDeadEndAfter(w); })) return false;
+    // Có từ láy (cheng cheng, ...) → đối thủ có thể dùng để dồn mình
+    if(words.some(function(w){ return isReduplicatedWord(w); })) return false;
+    // Mọi nước đi đều "không nên dùng"
+    return words.every(function(w){ return isRiskyAfter(w); });
   }
 
   // Tìm tất cả âm tiết thỏa điều kiện bẫy tự động
@@ -1494,7 +1508,8 @@
     });
   }
 
-  // Tự đánh dấu bẫy: âm cuối mà mọi từ bắt đầu bằng âm đó đều cụt / không nên dùng
+  // Tự đánh dấu bẫy: âm cuối mà mọi nước đi đều "không nên dùng",
+  // không có nước cụt và không có từ láy (vd. cheng cheng)
   var trapAutoDetectBtn = document.getElementById('trapAutoDetectBtn');
   if(trapAutoDetectBtn){
     trapAutoDetectBtn.addEventListener('click', function(){
@@ -1507,7 +1522,7 @@
       var already = new Set(getTrapEndings());
       var newOnes = found.filter(function(s){ return !already.has(s); });
       if(found.length === 0){
-        showTrapMsg('⚠️ Không tìm thấy âm cuối nào thỏa điều kiện (sau âm đó toàn từ cụt / không nên dùng).', 'err');
+        showTrapMsg('⚠️ Không tìm thấy âm bẫy tự động (cần: mọi nước đều "không nên dùng", không có cụt / từ láy).', 'err');
         return;
       }
       if(newOnes.length === 0){
